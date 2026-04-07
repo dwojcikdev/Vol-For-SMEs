@@ -1,2 +1,11 @@
-*.mem
+# Memory images / forensic dumps
 data/sample_memory_images/
+*.mem
+*.raw
+*.dmp
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
