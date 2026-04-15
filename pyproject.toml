@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vol-for-smes"
+version = "0.1.0"
+description = "Memory forensics helper for small and medium enterprises."
+readme = "README.txt"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[project.scripts]
+vol-for-smes = "vol_for_smes.main:main"
+
+[tool.setuptools.packages.find]
+include = ["vol_for_smes*"]
+exclude = ["tests*", "volatility_installation*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
+markers = [
+    "integration: tests that run real Volatility commands against a memory image",
+]
+

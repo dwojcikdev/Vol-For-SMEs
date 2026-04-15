@@ -21,10 +21,10 @@ def parse_processes(volatility_json):
         if isinstance(row, dict):
             # Volatility 3 format: dict with column names as keys
             process = {
-                "pid": row.get("PID") or row.get("pid"),
-                "ppid": row.get("PPID") or row.get("ppid"),
+                "pid": row.get("PID", row.get("pid")),
+                "ppid": row.get("PPID", row.get("ppid")),
                 "name": row.get("ImageFileName") or row.get("name") or row.get("Name"),
-                "threads": row.get("Threads") or row.get("threads")
+                "threads": row.get("Threads", row.get("threads"))
             }
         else:
             # Legacy format: list/tuple

@@ -1,23 +1,10 @@
-import sys
-from pathlib import Path
-
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from vol_for_smes.volatility import (
-        VolatilityRunner,
-        PLUGIN_GROUPS,
-        parse_processes,
-        detect_os,
-        resolve_volatility_command,
-    )
-else:
-    from .volatility import (
-        VolatilityRunner,
-        PLUGIN_GROUPS,
-        parse_processes,
-        detect_os,
-        resolve_volatility_command,
-    )
+from .volatility import (
+    VolatilityRunner,
+    PLUGIN_GROUPS,
+    parse_processes,
+    detect_os,
+    resolve_volatility_command,
+)
 
 def resolve_project_volatility_command():
     try:
@@ -108,3 +95,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

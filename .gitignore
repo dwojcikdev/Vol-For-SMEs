@@ -6,6 +6,26 @@ data/sample_memory_images/
 
 # Python bytecode
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Editor and OS noise
+.vscode/settings.json
+.DS_Store
+Thumbs.db

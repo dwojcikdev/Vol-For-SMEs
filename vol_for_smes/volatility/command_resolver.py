@@ -1,7 +1,9 @@
+import json
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
-import json
 
 
 def _can_invoke(command):
@@ -50,6 +52,34 @@ def _resolve_script_command(script_path):
         command = [launcher, str(script_path)]
         if _can_invoke(command):
             return command
+    return None
+
+
+def _command_from_path_or_text(value):
+    if not value:
+        return None
+
+    if isinstance(value, (list, tuple)):
+        command = [str(part) for part in value if str(part).strip()]
+        return command if command else None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    candidate_path = Path(text).expanduser()
+    if candidate_path.is_file():
+        if candidate_path.suffix.lower() == ".py":
+            return _resolve_script_command(candidate_path)
+        return [str(candidate_path)]
+
+    return shlex.split(text)
+
+
+def _resolve_configured_command(value):
+    command = _command_from_path_or_text(value)
+    if command and _can_invoke(command):
+        return command
     return None
 
 
@@ -112,8 +142,29 @@ def discover_volatility_commands():
     return unique
 
 
-def resolve_volatility_command(_volatility_path=None):
-    return _discover_installation_command()
+def resolve_volatility_command(volatility_path=None):
+    configured_values = (
+        volatility_path,
+        os.environ.get("VOLATILITY_COMMAND"),
+        os.environ.get("VOLATILITY_PATH"),
+    )
+    for value in configured_values:
+        command = _resolve_configured_command(value)
+        if command:
+            return command
+
+    try:
+        return _discover_installation_command()
+    except RuntimeError as installation_error:
+        for command in (["vol"], ["volatility"]):
+            if _can_invoke(command):
+                return command
+
+        raise RuntimeError(
+            f"{installation_error} Provide a Volatility command/path, set "
+            "VOLATILITY_COMMAND or VOLATILITY_PATH, install Volatility on PATH, "
+            "or include it in the project volatility_installation folder."
+        ) from installation_error
 
 
 def build_volatility_command(volatility_command, extra_args):
