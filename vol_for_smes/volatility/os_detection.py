@@ -7,28 +7,7 @@ from .command_resolver import (
     parse_json_output,
 )
 
-
-def _parse_info_rows(data):
-    if isinstance(data, dict):
-        data = [{"Variable": key, "Value": value} for key, value in data.items()]
-
-    if not isinstance(data, list):
-        return [], {}
-
-    parsed = {}
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-
-        key = str(
-            item.get("Variable", item.get("Name", item.get("Key", "")))
-        ).strip()
-        value = item.get("Value", item.get("value", ""))
-        if not key:
-            continue
-        parsed[key.lower()] = value
-
-    return data, parsed
+from ..utils.helpers import parse_info_rows
 
 
 def _candidate_commands(volatility_path):
@@ -67,7 +46,7 @@ def _detect_with_vol3(memory_path, volatility_command):
         raise RuntimeError(error_text or "windows.info failed")
 
     result_data = parse_json_output(result.stdout)
-    rows, parsed_values = _parse_info_rows(result_data)
+    rows, parsed_values = parse_info_rows(result_data)
     if not rows:
         return {"os": "Unknown", "details": "No OS information found"}
 

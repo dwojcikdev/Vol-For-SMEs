@@ -5,80 +5,29 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-def _can_invoke(command):
-    try:
-        result = subprocess.run(
-            list(command) + ["-h"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=8,
-            check=False,
-        )
-    except (FileNotFoundError, PermissionError, OSError, subprocess.TimeoutExpired):
-        return False
-
-    output = f"{result.stdout}\n{result.stderr}".lower()
-
-    if "no module named" in output:
-        return False
-    if "is not recognized as an internal or external command" in output:
-        return False
-    if "can't open file" in output:
-        return False
-
-    if result.returncode == 0:
-        return True
-
-    return "usage" in output and "vol" in output
+from ..utils.helpers import can_invoke_command, parse_json_output, build_command
+from ..utils.file_utils import get_project_root, get_volatility_installation_root, command_from_path_or_text, resolve_script_command
 
 
 def _project_root():
-    return Path(__file__).resolve().parents[2]
+    return get_project_root()
 
 
 def _volatility_installation_root():
-    return _project_root() / "volatility_installation"
+    return get_volatility_installation_root()
 
 
 def _resolve_script_command(script_path):
-    launchers = []
-    for candidate in ("py", "python", sys.executable):
-        if candidate and candidate not in launchers:
-            launchers.append(candidate)
-
-    for launcher in launchers:
-        command = [launcher, str(script_path)]
-        if _can_invoke(command):
-            return command
-    return None
+    return resolve_script_command(script_path)
 
 
 def _command_from_path_or_text(value):
-    if not value:
-        return None
-
-    if isinstance(value, (list, tuple)):
-        command = [str(part) for part in value if str(part).strip()]
-        return command if command else None
-
-    text = str(value).strip()
-    if not text:
-        return None
-
-    candidate_path = Path(text).expanduser()
-    if candidate_path.is_file():
-        if candidate_path.suffix.lower() == ".py":
-            return _resolve_script_command(candidate_path)
-        return [str(candidate_path)]
-
-    return shlex.split(text)
+    return command_from_path_or_text(value)
 
 
 def _resolve_configured_command(value):
     command = _command_from_path_or_text(value)
-    if command and _can_invoke(command):
+    if command and can_invoke_command(command):
         return command
     return None
 
@@ -109,7 +58,7 @@ def discover_volatility_commands():
         for candidate in install_root.rglob(binary_name):
             if candidate.is_file():
                 command = [str(candidate)]
-                if _can_invoke(command):
+                if can_invoke_command(command):
                     candidates.append(command)
 
     for candidate in install_root.rglob("vol.py"):
@@ -127,7 +76,7 @@ def discover_volatility_commands():
         if "volatility_2" not in name and "volatility2" not in name:
             continue
         command = [str(candidate)]
-        if _can_invoke(command):
+        if can_invoke_command(command):
             candidates.append(command)
 
     seen = set()
@@ -157,7 +106,7 @@ def resolve_volatility_command(volatility_path=None):
         return _discover_installation_command()
     except RuntimeError as installation_error:
         for command in (["vol"], ["volatility"]):
-            if _can_invoke(command):
+            if can_invoke_command(command):
                 return command
 
         raise RuntimeError(
@@ -168,7 +117,7 @@ def resolve_volatility_command(volatility_path=None):
 
 
 def build_volatility_command(volatility_command, extra_args):
-    return list(volatility_command) + list(extra_args)
+    return build_command(volatility_command, extra_args)
 
 
 def detect_volatility_variant(volatility_command):
@@ -189,19 +138,3 @@ def detect_volatility_variant(volatility_command):
     if "volatility foundation volatility framework 2" in output:
         return "vol2"
     return "unknown"
-
-
-def parse_json_output(output_text):
-    text = (output_text or "").strip()
-    if not text:
-        raise json.JSONDecodeError("No JSON data", "", 0)
-
-    decoder = json.JSONDecoder()
-    starts = [idx for idx, ch in enumerate(text) if ch in "[{"]
-    for start in starts:
-        try:
-            data, _ = decoder.raw_decode(text[start:])
-            return data
-        except json.JSONDecodeError:
-            continue
-    raise json.JSONDecodeError("No JSON object could be decoded", text, 0)

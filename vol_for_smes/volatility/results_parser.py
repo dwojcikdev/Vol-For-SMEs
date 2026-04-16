@@ -1,14 +1,5 @@
 # Cleans up and parses JSON output into structured dictionaries
-def extract_rows(volatility_json):
-
-    if isinstance(volatility_json, list):
-        # For Volatility 3 JSON output, it's a list of row objects
-        return volatility_json
-    elif "rows" in volatility_json:
-        # Legacy format
-        return volatility_json["rows"]
-    else:
-        return []
+from ..utils.helpers import extract_rows
 
 
 def parse_processes(volatility_json):
