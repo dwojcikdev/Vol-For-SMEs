@@ -7,12 +7,55 @@ from .volatility import (
 )
 from .analysis import analyse_artifacts
 
+
+def _format_mitre_tags(mitre_tags):
+    if not mitre_tags:
+        return "None"
+    return ", ".join(
+        f"{tag.get('technique_id')} {tag.get('name')}"
+        for tag in mitre_tags[:5]
+    )
+
+
 def resolve_project_volatility_command():
     try:
         return resolve_volatility_command()
     except RuntimeError as exc:
         print(f"\nCould not resolve Volatility from the project installation folder: {exc}")
         return None
+
+
+def display_os_detection_result(os_info):
+    print("OS Detection Result:\n")
+
+    if "error" in os_info:
+        print("We could not identify the operating system from the memory image.")
+        print(f"Reason: {os_info['error']}")
+        return
+
+    if os_info.get("os") != "Windows":
+        print(f"Detected operating system: {os_info.get('os', 'Unknown')}")
+        return
+
+    detected_with = os_info.get("detected_with", "unknown plugin")
+    variant = os_info.get("volatility_variant", "unknown")
+    architecture = os_info.get("architecture")
+    major_version = os_info.get("major_version")
+    minor_version = os_info.get("minor_version")
+    profile = os_info.get("profile")
+
+    print("Operating system: Windows")
+    if architecture:
+        print(f"Architecture: {architecture}")
+    if major_version is not None:
+        version = str(major_version)
+        if minor_version is not None:
+            version = f"{version}.{minor_version}"
+        print(f"Version: {version}")
+    if profile:
+        print(f"Profile: {profile}")
+    print(f"Detected using: {detected_with}")
+    print(f"Volatility version: {variant}")
 
 
 def run_default_investigation(memory_image):
@@ -28,8 +71,7 @@ def run_default_investigation(memory_image):
 
     os_info = detect_os(memory_image, volatility_command)
 
-    print("OS Detection Result:")
-    print(os_info)
+    display_os_detection_result(os_info)
 
     if "error" in os_info:
         print("\nInvestigation could not start.")
@@ -57,6 +99,8 @@ def run_default_investigation(memory_image):
 def display_analysis_results(analysis):
     plugin_findings = analysis.get("plugin_findings", {})
     risk_summary = analysis.get("risk_summary", {})
+    process_analysis = analysis.get("process_analysis", {})
+    network_analysis = analysis.get("network_analysis", {})
     timeline = analysis.get("timeline", [])
 
     print("\nAnalysis Summary:\n")
@@ -84,13 +128,54 @@ def display_analysis_results(analysis):
             print(
                 f"[{finding['severity'].upper()}] {finding['plugin']}: {finding['summary']}"
             )
+            print(f"  Risk score: {finding.get('risk_score', 0)}")
+            print(f"  MITRE ATT&CK: {_format_mitre_tags(finding.get('mitre_tags', []))}")
             for indicator in finding.get("indicators", [])[:5]:
                 print(f"  - {indicator}")
     else:
         print("\nNo medium or high severity findings were identified.\n")
 
+    process_summary = process_analysis.get("summary")
+    suspicious_processes = process_analysis.get("suspicious_processes", [])
+    if process_summary:
+        print("\nProcess Analysis:\n")
+        print(process_summary)
+        print(f"Risk score: {process_analysis.get('risk_score', 0)}")
+        print(f"MITRE ATT&CK: {_format_mitre_tags(process_analysis.get('mitre_tags', []))}")
+        if suspicious_processes:
+            for process in suspicious_processes[:5]:
+                print(
+                    f"[{process['severity'].upper()}] {process.get('name') or 'unknown'} "
+                    f"(PID {process.get('pid') or '?'})"
+                )
+                print(f"  Risk score: {process.get('risk_score', 0)}")
+                print(f"  MITRE ATT&CK: {_format_mitre_tags(process.get('mitre_tags', []))}")
+                for reason in process.get("reasons", [])[:3]:
+                    print(f"  - {reason}")
+
+    network_summary = network_analysis.get("summary")
+    suspicious_connections = network_analysis.get("suspicious_connections", [])
+    if network_summary:
+        print("\nNetwork Analysis:\n")
+        print(network_summary)
+        print(f"Risk score: {network_analysis.get('risk_score', 0)}")
+        print(f"MITRE ATT&CK: {_format_mitre_tags(network_analysis.get('mitre_tags', []))}")
+        if suspicious_connections:
+            for connection in suspicious_connections[:5]:
+                print(
+                    f"[{connection['severity'].upper()}] "
+                    f"{connection.get('owner') or 'unknown process'} "
+                    f"(PID {connection.get('pid') or '?'}) "
+                    f"{connection.get('local_address') or '?'}:{connection.get('local_port') or '?'} "
+                    f"-> {connection.get('remote_address') or '?'}:{connection.get('remote_port') or '?'}"
+                )
+                print(f"  Risk score: {connection.get('risk_score', 0)}")
+                print(f"  MITRE ATT&CK: {_format_mitre_tags(connection.get('mitre_tags', []))}")
+                for reason in connection.get("reasons", [])[:3]:
+                    print(f"  - {reason}")
+
     if timeline:
-        print("Timeline preview:\n")
+        print("\nTimeline preview:\n")
         for event in timeline[:10]:
             print(f"{event['timestamp']}  {event['description']}")
     else:

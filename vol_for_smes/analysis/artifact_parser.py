@@ -8,6 +8,9 @@ from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..utils.helpers import extract_rows
+from .network_analysis import analyse_network_activity
+from .process_analysis import analyse_process_activity
+from .scoring import build_mitre_tags, calculate_risk_score, infer_mitre_techniques
 from .timeline_builder import build_timeline
 
 SUSPICIOUS_PATH_KEYWORDS = (
@@ -132,11 +135,13 @@ def analyse_plugin_output(
 
     rows = _normalise_rows(plugin_result)
     indicators: List[str] = []
+    mitre_techniques = set()
     severity = "none"
     plugin_name = str(plugin_name)
 
     if plugin_name == "windows.malfind" and rows:
         severity = "high"
+        mitre_techniques.add("T1055")
         for row in rows:
             indicators.append(
                 f"Injected or RWX memory candidate in {_describe_row_identity(row)}"
@@ -149,6 +154,9 @@ def analyse_plugin_output(
             )
             if any(pattern in command_line for pattern in SUSPICIOUS_COMMAND_PATTERNS):
                 severity = _merge_severity(severity, "high")
+                mitre_techniques.add("T1059")
+                if "powershell" in command_line:
+                    mitre_techniques.add("T1059.001")
                 indicators.append(
                     f"Suspicious command line in {_describe_row_identity(row)}"
                 )
@@ -158,6 +166,7 @@ def analyse_plugin_output(
             path = _safe_lower(_find_first(row, "Path", "FullPath", "LoadPath"))
             if any(keyword in path for keyword in SUSPICIOUS_PATH_KEYWORDS):
                 severity = _merge_severity(severity, "medium")
+                mitre_techniques.add("T1574")
                 indicators.append(
                     f"DLL loaded from user-writable path in {_describe_row_identity(row)}"
                 )
@@ -171,6 +180,7 @@ def analyse_plugin_output(
                 and handle_type in {"file", "key", "process", "mutant", ""}
             ):
                 severity = _merge_severity(severity, "medium")
+                mitre_techniques.add("T1564")
                 indicators.append(
                     f"Suspicious handle target in {_describe_row_identity(row)}"
                 )
@@ -184,12 +194,14 @@ def analyse_plugin_output(
                 pattern in path for pattern in SUSPICIOUS_FILE_PATTERNS
             ):
                 severity = _merge_severity(severity, "medium")
+                mitre_techniques.add("T1036.005")
                 indicators.append(
                     f"Executable or script artefact in a suspicious path: {_describe_row_identity(row)}"
                 )
 
     elif plugin_name == "windows.ssdt" and rows:
         severity = "high"
+        mitre_techniques.add("T1562")
         indicators.append("SSDT entries were returned and should be reviewed for hooks")
 
     elif plugin_name == "windows.modules":
@@ -197,6 +209,7 @@ def analyse_plugin_output(
             path = _safe_lower(_find_first(row, "Path", "File", "Name"))
             if any(keyword in path for keyword in SUSPICIOUS_PATH_KEYWORDS):
                 severity = _merge_severity(severity, "high")
+                mitre_techniques.add("T1574")
                 indicators.append(
                     f"Kernel module loaded from suspicious path in {_describe_row_identity(row)}"
                 )
@@ -206,6 +219,7 @@ def analyse_plugin_output(
             path = _safe_lower(_find_first(row, "Binary", "BinaryPath", "Path"))
             if any(keyword in path for keyword in SUSPICIOUS_PATH_KEYWORDS):
                 severity = _merge_severity(severity, "high")
+                mitre_techniques.add("T1543.003")
                 indicators.append(
                     f"Service binary in suspicious path: {_describe_row_identity(row)}"
                 )
@@ -219,13 +233,18 @@ def analyse_plugin_output(
             state = _safe_lower(_find_first(row, "State"))
             if foreign_addr and foreign_addr not in {"0.0.0.0", "::", "*"}:
                 severity = _merge_severity(severity, "low")
+                mitre_techniques.add("T1071")
             if owner in {"powershell.exe", "cmd.exe", "wscript.exe", "cscript.exe"}:
                 severity = _merge_severity(severity, "medium")
+                mitre_techniques.add("T1059")
+                if owner == "powershell.exe":
+                    mitre_techniques.add("T1059.001")
                 indicators.append(
                     f"Network-capable scripting utility observed in {_describe_row_identity(row)}"
                 )
             if state == "listening" and owner in {"rundll32.exe", "regsvr32.exe"}:
                 severity = _merge_severity(severity, "high")
+                mitre_techniques.add("T1218")
                 indicators.append(
                     f"Unexpected listener process in {_describe_row_identity(row)}"
                 )
@@ -242,6 +261,7 @@ def analyse_plugin_output(
                 hidden.append(row)
         if hidden:
             severity = _merge_severity(severity, "high")
+            mitre_techniques.add("T1564")
             indicators.extend(
                 f"Process found in psscan but not pslist: {_describe_row_identity(row)}"
                 for row in hidden
@@ -252,11 +272,22 @@ def analyse_plugin_output(
         if indicators
         else "No obvious malicious indicators detected by current heuristics"
     )
+    all_techniques = sorted(
+        set(mitre_techniques)
+        | set(
+            infer_mitre_techniques(
+                plugin_name=plugin_name,
+                texts=indicators + [summary],
+            )
+        )
+    )
 
     return {
         "plugin": plugin_name,
         "status": "analysed",
         "severity": severity,
+        "risk_score": calculate_risk_score(severity, all_techniques, len(indicators)),
+        "mitre_tags": build_mitre_tags(all_techniques),
         "summary": summary,
         "indicators": indicators,
         "row_count": len(rows),
@@ -284,9 +315,13 @@ def analyse_artifacts(results: Dict[str, Any]) -> Dict[str, Any]:
         for plugin_name, plugin_result in results.items()
     }
     timeline = build_timeline(results)
+    process_analysis = analyse_process_activity(results)
+    network_analysis = analyse_network_activity(results)
 
     return {
         "plugin_findings": plugin_findings,
         "risk_summary": summarise_plugin_risk(plugin_findings.values()),
+        "process_analysis": process_analysis,
+        "network_analysis": network_analysis,
         "timeline": timeline,
     }

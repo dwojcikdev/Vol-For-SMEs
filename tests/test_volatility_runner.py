@@ -154,3 +154,29 @@ def test_run_multiple_records_plugin_errors(mock_build, _):
     assert runner.run_multiple({"processes": "windows.pslist"}, max_workers=1) == {
         "processes": {"error": "failed"}
     }
+
+
+@patch("builtins.print")
+def test_run_multiple_prints_concise_status_messages(mock_print):
+    runner = make_runner()
+    runner.run_plugin = MagicMock(return_value={"plugin": "windows.pslist"})
+
+    runner.run_multiple(["windows.pslist"], max_workers=1)
+
+    printed = "\n".join(call.args[0] for call in mock_print.call_args_list if call.args)
+    assert "[windows.pslist] running..." in printed
+    assert "[windows.pslist] successfully finished in " in printed
+    assert "1 plugins out of 1 executed successfully" in printed
+    assert "Output for windows.pslist" not in printed
+
+
+@patch("builtins.print")
+def test_run_multiple_prints_failed_message_on_error(mock_print):
+    runner = make_runner()
+    runner.run_plugin = MagicMock(side_effect=RuntimeError("failed"))
+
+    runner.run_multiple(["windows.pslist"], max_workers=1)
+
+    printed = "\n".join(call.args[0] for call in mock_print.call_args_list if call.args)
+    assert "[windows.pslist] failed" in printed
+    assert "[windows.pslist] This plugin could not be completed." in printed

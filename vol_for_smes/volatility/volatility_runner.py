@@ -1,4 +1,3 @@
-import json
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -54,6 +53,24 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
             return VOL2_PLUGIN_MAP.get(plugin, plugin)
         return plugin
 
+    def _format_plugin_error(self, error_text):
+        message = str(error_text or "").strip()
+        lowered = message.lower()
+
+        if "file does not exist" in lowered or "requested file doesn't exist" in lowered:
+            return "Volatility could not find the memory image file."
+        if "invalid json" in lowered or "returned invalid json" in lowered:
+            return "Volatility returned unreadable data for this plugin."
+        if "was not found" in lowered:
+            return "Volatility could not be started."
+        if "no suitable plugins" in lowered or "unsatisfied requirement" in lowered:
+            return "This plugin could not run successfully against the selected memory image."
+        if "plugin failed" in lowered:
+            return "This plugin could not be completed."
+        if not message:
+            return "This plugin could not be completed."
+        return f"This plugin could not be completed. {message}"
+
     def run_plugin(self, plugin):
         translated_plugin = self._translate_plugin(plugin)
 
@@ -100,11 +117,7 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         
         def run_single_plugin(name, plugin):
             translated_plugin = self._translate_plugin(plugin)
-            command = build_volatility_command(
-                self.volatility_command,
-                self._base_args() + [translated_plugin]
-            )
-            print(f"Running {name}...\nCommand: {' '.join(command)}")
+            print(f"[{name}] running...")
             start_time = time.time()
             try:
                 result = self.run_plugin(plugin)
@@ -112,14 +125,18 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
                 elapsed = end_time - start_time
                 minutes = int(elapsed // 60)
                 seconds = elapsed % 60
-                print(f"Completed {name} in {minutes}m {seconds:.2f}s")
+                print(f"[{name}] successfully finished in {minutes}m {seconds:.2f}s")
                 return name, result
             except Exception as e:
                 end_time = time.time()
                 elapsed = end_time - start_time
                 minutes = int(elapsed // 60)
                 seconds = elapsed % 60
-                print(f"Failed {name} in {minutes}m {seconds:.2f}s: {str(e)}")
+                print(f"[{name}] failed")
+                print(
+                    f"[{name}] {self._format_plugin_error(str(e))} "
+                    f"({minutes}m {seconds:.2f}s)"
+                )
                 return name, {"error": str(e)}
         
         overall_start = time.time()
@@ -134,17 +151,14 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
             for future in as_completed(future_to_name):
                 name, result = future.result()
                 results[name] = result
-                print(f"\nOutput for {name}:")
-                try:
-                    print(json.dumps(result, indent=2))
-                except TypeError:
-                    print(str(result))
-                print()
-        
+
         overall_end = time.time()
         overall_elapsed = overall_end - overall_start
         overall_minutes = int(overall_elapsed // 60)
         overall_seconds = overall_elapsed % 60
+        successful_plugins = sum(1 for result in results.values() if "error" not in result)
+        total_plugins = len(plugin_dict)
+        print(f"{successful_plugins} plugins out of {total_plugins} executed successfully")
         print(f"Total plugin execution time: {overall_minutes}m {overall_seconds:.2f}s")
         
         return results
