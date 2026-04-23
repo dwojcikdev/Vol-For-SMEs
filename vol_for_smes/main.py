@@ -5,6 +5,7 @@ from .volatility import (
     detect_os,
     resolve_volatility_command,
 )
+from .analysis import analyse_artifacts
 
 def resolve_project_volatility_command():
     try:
@@ -53,6 +54,49 @@ def run_default_investigation(memory_image):
     return results
 
 
+def display_analysis_results(analysis):
+    plugin_findings = analysis.get("plugin_findings", {})
+    risk_summary = analysis.get("risk_summary", {})
+    timeline = analysis.get("timeline", [])
+
+    print("\nAnalysis Summary:\n")
+    print(
+        "High: {high}  Medium: {medium}  Low: {low}  None: {none}".format(
+            high=risk_summary.get("high", 0),
+            medium=risk_summary.get("medium", 0),
+            low=risk_summary.get("low", 0),
+            none=risk_summary.get("none", 0),
+        )
+    )
+
+    interesting_findings = [
+        finding
+        for finding in plugin_findings.values()
+        if finding.get("severity") in {"high", "medium"}
+    ]
+
+    if interesting_findings:
+        print("\nPotentially suspicious findings:\n")
+        for finding in sorted(
+            interesting_findings,
+            key=lambda item: {"high": 0, "medium": 1}.get(item.get("severity"), 2),
+        ):
+            print(
+                f"[{finding['severity'].upper()}] {finding['plugin']}: {finding['summary']}"
+            )
+            for indicator in finding.get("indicators", [])[:5]:
+                print(f"  - {indicator}")
+    else:
+        print("\nNo medium or high severity findings were identified.\n")
+
+    if timeline:
+        print("Timeline preview:\n")
+        for event in timeline[:10]:
+            print(f"{event['timestamp']}  {event['description']}")
+    else:
+        print("No timestamped artefacts were available for the timeline.")
+
+
 def display_process_results(results):
 
     if "windows.pslist" not in results:
@@ -90,6 +134,9 @@ def main():
     if not results:
         return
 
+    analysis = analyse_artifacts(results)
+
+    display_analysis_results(analysis)
     display_process_results(results)
 
 

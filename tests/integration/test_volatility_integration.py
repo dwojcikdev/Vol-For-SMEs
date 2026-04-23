@@ -10,6 +10,11 @@ from vol_for_smes.volatility.plugin_manager import PLUGIN_GROUPS
 
 pytestmark = pytest.mark.integration
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SAMPLE_MEMORY_IMAGES = (
+    PROJECT_ROOT / "data" / "sample_memory_images" / "df2025sub.mem",
+)
+
 
 def _plugins_from_env():
     configured_plugins = os.environ.get("VOL_FOR_SMES_INTEGRATION_PLUGINS")
@@ -18,15 +23,22 @@ def _plugins_from_env():
     return ["windows.pslist"]
 
 
+def _resolve_memory_image_path():
+    for candidate in DEFAULT_SAMPLE_MEMORY_IMAGES:
+        if candidate.is_file():
+            return candidate
+
+    return None
+
+
 @pytest.fixture(scope="session")
 def memory_image_path():
-    configured_path = os.environ.get("VOL_FOR_SMES_MEMORY_IMAGE")
-    if not configured_path:
-        pytest.skip("set VOL_FOR_SMES_MEMORY_IMAGE to run Volatility integration tests")
+    memory_path = _resolve_memory_image_path()
+    if memory_path is None:
+        pytest.skip("add a sample memory image under data/sample_memory_images")
 
-    memory_path = Path(configured_path).expanduser()
     if not memory_path.is_file():
-        pytest.fail(f"VOL_FOR_SMES_MEMORY_IMAGE does not point to a file: {memory_path}")
+        pytest.fail(f"Integration memory image does not point to a file: {memory_path}")
 
     return str(memory_path)
 

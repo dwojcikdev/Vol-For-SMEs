@@ -4,17 +4,18 @@ from unittest.mock import patch
 import pytest
 
 from vol_for_smes.volatility import os_detection
+from vol_for_smes.utils.helpers import parse_info_rows
 
 
 def test_parse_info_rows_accepts_dict_output():
-    rows, parsed = os_detection._parse_info_rows({"NtMajorVersion": 10})
+    rows, parsed = parse_info_rows({"NtMajorVersion": 10})
 
     assert rows == [{"Variable": "NtMajorVersion", "Value": 10}]
     assert parsed == {"ntmajorversion": 10}
 
 
 def test_parse_info_rows_accepts_list_output():
-    rows, parsed = os_detection._parse_info_rows(
+    rows, parsed = parse_info_rows(
         [{"Name": "Is64Bit", "value": "True"}, {"Key": "Kernel Base", "Value": "0x1"}]
     )
 
@@ -24,14 +25,14 @@ def test_parse_info_rows_accepts_list_output():
 
 
 def test_parse_info_rows_ignores_non_dict_rows_and_empty_keys():
-    rows, parsed = os_detection._parse_info_rows([['bad'], {"Variable": "", "Value": 1}])
+    rows, parsed = parse_info_rows([['bad'], {"Variable": "", "Value": 1}])
 
     assert rows == [["bad"], {"Variable": "", "Value": 1}]
     assert parsed == {}
 
 
 def test_parse_info_rows_returns_empty_for_invalid_data():
-    assert os_detection._parse_info_rows("bad") == ([], {})
+    assert parse_info_rows("bad") == ([], {})
 
 
 @patch("vol_for_smes.volatility.os_detection.resolve_volatility_command")
