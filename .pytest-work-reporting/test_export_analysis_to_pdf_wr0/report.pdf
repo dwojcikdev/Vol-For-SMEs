@@ -1,0 +1,225 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 2827 >>
+stream
+BT
+/F1 11 Tf
+50 782 Td
+/F1 16 Tf
+(Vol For SMEs Memory Analysis Report) Tj
+0 -18 Td
+/F1 11 Tf
+() Tj
+0 -14 Td
+(Memory Image: sample.raw) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+/F1 14 Tf
+(Executive Summary) Tj
+0 -18 Td
+/F1 11 Tf
+(Risk counts: High 1, Medium 0, Low 0, Informational 1.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+(The memory analysis identified 1 high, 0 medium, 0 low, and 1 informational plugin) Tj
+0 -14 Td
+(outcomes.) Tj
+0 -14 Td
+(1 suspicious process\(es\) identified) Tj
+0 -14 Td
+(1 suspicious network connection\(s\) identified) Tj
+0 -14 Td
+(The most urgent result is 'Suspicious process: powershell.exe \(PID 900\)' with high) Tj
+0 -14 Td
+(severity and risk score 97.) Tj
+0 -14 Td
+(1 timestamped artefact\(s\) were available to support timeline reconstruction.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+/F1 14 Tf
+(Detailed Findings) Tj
+0 -18 Td
+/F1 11 Tf
+() Tj
+0 -14 Td
+/F1 12 Tf
+(Suspicious process: powershell.exe \(PID 900\) [High | Risk 97]) Tj
+0 -14 Td
+/F1 11 Tf
+(Category: Process Finding) Tj
+0 -14 Td
+(Affected asset: powershell.exe \(PID 900\)) Tj
+0 -14 Td
+(Summary: malfind identified suspicious injected or executable memory, suspicious) Tj
+0 -14 Td
+(command-line execution pattern) Tj
+0 -14 Td
+(Possible attack: Process Injection) Tj
+0 -14 Td
+(What it means: Code may have been inserted into another process to hide execution,) Tj
+0 -14 Td
+(steal data, or evade controls.) Tj
+0 -14 Td
+(MITRE ATT&CK:) Tj
+0 -14 Td
+(- T1055 - Process Injection) Tj
+0 -14 Td
+(Evidence:) Tj
+0 -14 Td
+(- malfind identified suspicious injected or executable memory) Tj
+0 -14 Td
+(- suspicious command-line execution pattern) Tj
+0 -14 Td
+(Recommended remediation:) Tj
+0 -14 Td
+(- Capture the affected process memory and preserve the host for deeper) Tj
+0 -14 Td
+(investigation.) Tj
+0 -14 Td
+(- Isolate the endpoint and reset credentials used on the system if compromise is) Tj
+0 -14 Td
+(suspected.) Tj
+0 -14 Td
+(- Reimage or rebuild the system if malicious injection is confirmed.) Tj
+0 -14 Td
+(- Review the process parent, command line, loaded modules, and associated user) Tj
+0 -14 Td
+(account.) Tj
+0 -14 Td
+(- Collect the process binary and any referenced scripts for malware analysis.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+/F1 12 Tf
+(windows.malfind [High | Risk 95]) Tj
+0 -14 Td
+/F1 11 Tf
+(Category: Plugin Finding) Tj
+0 -14 Td
+(Summary: 1 suspicious indicator\(s\) detected) Tj
+0 -14 Td
+(Possible attack: Process Injection) Tj
+0 -14 Td
+(What it means: Code may have been inserted into another process to hide execution,) Tj
+0 -14 Td
+(steal data, or evade controls.) Tj
+0 -14 Td
+(MITRE ATT&CK:) Tj
+0 -14 Td
+(- T1055 - Process Injection) Tj
+0 -14 Td
+(Evidence:) Tj
+0 -14 Td
+(- Injected or RWX memory candidate in powershell.exe | PID 900) Tj
+0 -14 Td
+(Recommended remediation:) Tj
+0 -14 Td
+(- Capture the affected process memory and preserve the host for deeper) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+4 0 obj
+<< /Length 1882 >>
+stream
+BT
+/F1 11 Tf
+50 782 Td
+(investigation.) Tj
+0 -14 Td
+(- Isolate the endpoint and reset credentials used on the system if compromise is) Tj
+0 -14 Td
+(suspected.) Tj
+0 -14 Td
+(- Reimage or rebuild the system if malicious injection is confirmed.) Tj
+0 -14 Td
+(- Review the full plugin output to confirm whether the indicator reflects malicious) Tj
+0 -14 Td
+(behaviour or legitimate administration.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+/F1 12 Tf
+(Suspicious network activity: powershell.exe \(PID 900\) [High | Risk 88]) Tj
+0 -14 Td
+/F1 11 Tf
+(Category: Network Finding) Tj
+0 -14 Td
+(Affected asset: powershell.exe \(PID 900\)) Tj
+0 -14 Td
+(Summary: interactive shell process communicating over the network) Tj
+0 -14 Td
+(Possible attack: Application Layer Protocol) Tj
+0 -14 Td
+(What it means: Suspicious traffic may be using normal network protocols to) Tj
+0 -14 Td
+(communicate with remote systems or command infrastructure.) Tj
+0 -14 Td
+(MITRE ATT&CK:) Tj
+0 -14 Td
+(- T1071 - Application Layer Protocol) Tj
+0 -14 Td
+(Evidence:) Tj
+0 -14 Td
+(- 10.0.0.5:49152 -> 8.8.8.8:443 \(established\)) Tj
+0 -14 Td
+(- interactive shell process communicating over the network) Tj
+0 -14 Td
+(Recommended remediation:) Tj
+0 -14 Td
+(- Inspect the remote endpoints, associated domains, and firewall or proxy logs.) Tj
+0 -14 Td
+(- Block confirmed malicious destinations and monitor for repeated contact attempts.) Tj
+0 -14 Td
+(- Correlate the connection with the owning process and any downloaded content.) Tj
+0 -14 Td
+(- Check whether the remote endpoint is known, internal, or already blocked by) Tj
+0 -14 Td
+(security controls.) Tj
+0 -14 Td
+(- Review proxy, DNS, and firewall logs for related traffic from the same host.) Tj
+0 -14 Td
+() Tj
+0 -14 Td
+/F1 14 Tf
+(Timeline Highlights) Tj
+0 -18 Td
+/F1 11 Tf
+() Tj
+0 -14 Td
+(2024-01-01T10:00:00+00:00 - powershell.exe reported by windows.pslist \(CreateTime\)) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 6 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Type /Pages /Count 2 /Kids [ 3 0 R 5 0 R ] >>
+endobj
+7 0 obj
+<< /Type /Catalog /Pages 6 0 R >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000002958 00000 n 
+0000003084 00000 n 
+0000005018 00000 n 
+0000005144 00000 n 
+0000005209 00000 n 
+trailer
+<< /Size 8 /Root 7 0 R >>
+startxref
+5258
+%%EOF

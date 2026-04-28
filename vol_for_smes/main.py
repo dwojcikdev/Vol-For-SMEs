@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from .volatility import (
     VolatilityRunner,
     PLUGIN_GROUPS,
@@ -6,6 +8,7 @@ from .volatility import (
     resolve_volatility_command,
 )
 from .analysis import analyse_artifacts
+from .reporting import export_analysis_to_pdf
 
 
 def _format_mitre_tags(mitre_tags):
@@ -208,6 +211,38 @@ def display_process_results(results):
         )
 
 
+def _default_report_path(memory_image):
+    memory_image_path = Path(memory_image).expanduser()
+    stem = memory_image_path.stem or "memory_image"
+    return Path.cwd() / f"{stem}_report.pdf"
+
+
+def prompt_and_export_report(analysis, memory_image):
+    response = input("Export analysis report to PDF? [Y/n]: ").strip().lower()
+    if response not in {"", "y", "yes"}:
+        print("PDF export skipped.")
+        return None
+
+    default_output_path = _default_report_path(memory_image)
+    custom_output = input(
+        f"Enter PDF output path [{default_output_path}]: "
+    ).strip()
+    output_path = Path(custom_output) if custom_output else default_output_path
+
+    try:
+        written_path = export_analysis_to_pdf(
+            analysis,
+            output_path,
+            case_metadata={"memory_image": memory_image},
+        )
+    except OSError as exc:
+        print(f"Could not export PDF report: {exc}")
+        return None
+
+    print(f"PDF report exported to: {written_path}")
+    return written_path
+
+
 def main():
 
     print("Vol For SMEs - Memory Forensics Tool\n")
@@ -223,6 +258,7 @@ def main():
 
     display_analysis_results(analysis)
     display_process_results(results)
+    prompt_and_export_report(analysis, memory_image)
 
 
 if __name__ == "__main__":
