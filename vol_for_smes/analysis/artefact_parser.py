@@ -309,7 +309,7 @@ def summarise_plugin_risk(plugin_findings: Iterable[Dict[str, Any]]) -> Dict[str
     }
 
 
-def analyse_artifacts(results: Dict[str, Any]) -> Dict[str, Any]:
+def analyse_artefacts(results: Dict[str, Any]) -> Dict[str, Any]:
     plugin_findings = {
         plugin_name: analyse_plugin_output(plugin_name, plugin_result, all_results=results)
         for plugin_name, plugin_result in results.items()

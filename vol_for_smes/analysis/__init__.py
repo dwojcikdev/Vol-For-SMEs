@@ -1,4 +1,4 @@
-from .artifact_parser import (
+from .artefact_parser import (
     analyse_artifacts,
     analyse_plugin_output,
     summarise_plugin_risk,
