@@ -88,9 +88,9 @@ def test_resolve_script_command_returns_none_when_no_launcher_works(_):
 
 @patch("vol_for_smes.volatility.command_resolver.discover_volatility_commands")
 def test_discover_installation_command_returns_first_discovered_command(mock_discover):
-    mock_discover.return_value = [["vol3"], ["vol2"]]
+    mock_discover.return_value = [["vol"], ["fallback-vol"]]
 
-    assert command_resolver._discover_installation_command() == ["vol3"]
+    assert command_resolver._discover_installation_command() == ["vol"]
 
 
 @patch("vol_for_smes.volatility.command_resolver.discover_volatility_commands")
@@ -172,34 +172,6 @@ def test_build_volatility_command_combines_command_and_args():
         ["vol"],
         ["-f", "memory.raw"],
     ) == ["vol", "-f", "memory.raw"]
-
-
-@patch("vol_for_smes.volatility.command_resolver.subprocess.run")
-def test_detect_volatility_variant_identifies_vol3(mock_run):
-    mock_run.return_value = SimpleNamespace(
-        stdout="Volatility 3 Framework",
-        stderr="",
-    )
-
-    assert command_resolver.detect_volatility_variant(["vol"]) == "vol3"
-
-
-@patch("vol_for_smes.volatility.command_resolver.subprocess.run")
-def test_detect_volatility_variant_identifies_vol2(mock_run):
-    mock_run.return_value = SimpleNamespace(
-        stdout="",
-        stderr="Volatility Foundation Volatility Framework 2",
-    )
-
-    assert command_resolver.detect_volatility_variant(["volatility"]) == "vol2"
-
-
-@patch("vol_for_smes.volatility.command_resolver.subprocess.run")
-def test_detect_volatility_variant_returns_unknown_on_execution_error(mock_run):
-    mock_run.side_effect = subprocess.TimeoutExpired(cmd=["vol"], timeout=15)
-
-    assert command_resolver.detect_volatility_variant(["vol"]) == "unknown"
-
 
 def test_parse_json_output_reads_json_after_prefix_text():
     assert command_resolver.parse_json_output('warning\n[{"PID": 4}]') == [{"PID": 4}]

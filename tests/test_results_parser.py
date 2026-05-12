@@ -15,7 +15,7 @@ def test_extract_rows_returns_empty_list_when_rows_missing():
     assert results_parser.extract_rows({"columns": []}) == []
 
 
-def test_parse_processes_parses_vol3_dict_rows():
+def test_parse_processes_parses_dict_rows():
     result = results_parser.parse_processes(
         [{"PID": 4, "PPID": 0, "ImageFileName": "System", "Threads": 100}]
     )

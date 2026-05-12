@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import wrap
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .report_builder import build_analysis_report
 
@@ -210,7 +210,7 @@ def _report_lines(report: Dict[str, object]) -> List[Tuple[str, int]]:
 
 
 def export_analysis_to_pdf(
-    analysis: Dict[str, object],
+    analysis: Any,
     output_path: str | Path,
     *,
     case_metadata: Optional[Dict[str, object]] = None,

@@ -6,85 +6,66 @@ import pytest
 from vol_for_smes.volatility import volatility_runner
 
 
-def make_runner(variant="vol3", os_context=None):
+def make_runner(os_context=None):
     with patch(
         "vol_for_smes.volatility.volatility_runner.resolve_volatility_command",
         return_value=["vol"],
-    ), patch(
-        "vol_for_smes.volatility.volatility_runner.detect_volatility_variant",
-        return_value=variant,
     ):
         return volatility_runner.VolatilityRunner("memory.raw", os_context=os_context)
 
 
-@patch("vol_for_smes.volatility.volatility_runner.detect_volatility_variant")
 @patch("vol_for_smes.volatility.volatility_runner.resolve_volatility_command")
-def test_init_resolves_command_and_detects_variant(mock_resolve, mock_detect):
+def test_init_resolves_command(mock_resolve):
     mock_resolve.return_value = ["vol"]
-    mock_detect.return_value = "vol3"
 
     runner = volatility_runner.VolatilityRunner("memory.raw")
 
     assert runner.memory_path == "memory.raw"
     assert runner.volatility_command == ["vol"]
-    assert runner.volatility_variant == "vol3"
 
 
-@patch("vol_for_smes.volatility.volatility_runner.detect_volatility_variant")
 @patch("vol_for_smes.volatility.volatility_runner.resolve_volatility_command")
-def test_init_uses_os_context_command_and_variant(mock_resolve, mock_detect):
+def test_init_uses_os_context_command(mock_resolve):
     runner = volatility_runner.VolatilityRunner(
         "memory.raw",
         os_context={
             "volatility_command": ["custom-vol"],
-            "volatility_variant": "vol2",
         },
     )
 
     assert runner.volatility_command == ["custom-vol"]
-    assert runner.volatility_variant == "vol2"
     mock_resolve.assert_not_called()
-    mock_detect.assert_not_called()
 
 
-def test_base_args_for_vol3_uses_json_renderer():
-    runner = make_runner("vol3")
+def test_base_args_use_json_renderer():
+    runner = make_runner()
 
     assert runner._base_args() == ["--renderer", "json", "-f", "memory.raw"]
 
 
-def test_base_args_for_vol2_uses_json_output_and_profile():
+def test_base_args_include_extra_args():
     runner = make_runner(
         os_context={
-            "volatility_command": ["volatility"],
-            "volatility_variant": "vol2",
-            "volatility_args": ["--profile=Win10"],
+            "volatility_command": ["vol"],
+            "volatility_args": ["--single-location", "file:///symbols"],
         }
     )
 
-    assert runner._base_args() == ["--output=json", "--profile=Win10", "-f", "memory.raw"]
-
-
-def test_translate_plugin_maps_vol2_windows_plugin_names():
-    runner = make_runner(
-        os_context={"volatility_command": ["volatility"], "volatility_variant": "vol2"}
-    )
-
-    assert runner._translate_plugin("windows.pslist") == "pslist"
-    assert runner._translate_plugin("custom.plugin") == "custom.plugin"
-
-
-def test_translate_plugin_leaves_vol3_plugin_names_unchanged():
-    runner = make_runner("vol3")
-
-    assert runner._translate_plugin("windows.pslist") == "windows.pslist"
+    assert runner._base_args() == [
+        "--renderer",
+        "json",
+        "--single-location",
+        "file:///symbols",
+        "-f",
+        "memory.raw",
+    ]
 
 
 @patch("vol_for_smes.volatility.volatility_runner.parse_json_output")
 @patch("vol_for_smes.volatility.volatility_runner.subprocess.run")
 @patch("vol_for_smes.volatility.volatility_runner.build_volatility_command")
 def test_run_plugin_builds_command_and_returns_parsed_json(mock_build, mock_run, mock_parse):
-    runner = make_runner("vol3")
+    runner = make_runner()
     mock_build.return_value = ["vol", "--renderer", "json", "-f", "memory.raw", "windows.pslist"]
     mock_run.return_value = SimpleNamespace(returncode=0, stdout='[{"PID": 4}]', stderr="")
     mock_parse.return_value = [{"PID": 4}]
@@ -100,7 +81,7 @@ def test_run_plugin_builds_command_and_returns_parsed_json(mock_build, mock_run,
 @patch("vol_for_smes.volatility.volatility_runner.subprocess.run")
 @patch("vol_for_smes.volatility.volatility_runner.build_volatility_command", return_value=["vol"])
 def test_run_plugin_raises_when_command_is_missing(_, mock_run):
-    runner = make_runner("vol3")
+    runner = make_runner()
     mock_run.side_effect = FileNotFoundError
 
     with pytest.raises(RuntimeError, match="was not found"):
@@ -110,7 +91,7 @@ def test_run_plugin_raises_when_command_is_missing(_, mock_run):
 @patch("vol_for_smes.volatility.volatility_runner.subprocess.run")
 @patch("vol_for_smes.volatility.volatility_runner.build_volatility_command", return_value=["vol"])
 def test_run_plugin_raises_when_process_fails(_, mock_run):
-    runner = make_runner("vol3")
+    runner = make_runner()
     mock_run.return_value = SimpleNamespace(returncode=1, stdout="", stderr="plugin failed")
 
     with pytest.raises(RuntimeError, match="plugin failed"):
@@ -121,7 +102,7 @@ def test_run_plugin_raises_when_process_fails(_, mock_run):
 @patch("vol_for_smes.volatility.volatility_runner.subprocess.run")
 @patch("vol_for_smes.volatility.volatility_runner.build_volatility_command", return_value=["vol"])
 def test_run_plugin_raises_when_json_is_invalid(_, mock_run, mock_parse):
-    runner = make_runner("vol3")
+    runner = make_runner()
     mock_run.return_value = SimpleNamespace(returncode=0, stdout="bad", stderr="")
     mock_parse.side_effect = ValueError("bad json")
 

@@ -41,9 +41,9 @@ def test_candidate_commands_includes_given_command_and_discovered_commands(
     mock_discover,
     mock_resolve,
 ):
-    mock_discover.return_value = [["vol3"], ["vol2"]]
+    mock_discover.return_value = [["vol"], ["fallback-vol"]]
 
-    assert os_detection._candidate_commands(["custom"]) == [["custom"], ["vol3"], ["vol2"]]
+    assert os_detection._candidate_commands(["custom"]) == [["custom"], ["vol"], ["fallback-vol"]]
     mock_resolve.assert_not_called()
 
 
@@ -59,7 +59,7 @@ def test_candidate_commands_uses_resolve_when_no_command_found(mock_discover, mo
 @patch("vol_for_smes.volatility.os_detection.parse_json_output")
 @patch("vol_for_smes.volatility.os_detection.subprocess.run")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command")
-def test_detect_with_vol3_returns_windows_details(mock_build, mock_run, mock_parse):
+def test_detect_with_windows_info_returns_windows_details(mock_build, mock_run, mock_parse):
     mock_build.return_value = ["vol", "--renderer", "json", "-f", "memory.raw", "windows.info"]
     mock_run.return_value = SimpleNamespace(returncode=0, stdout="[]", stderr="")
     mock_parse.return_value = [
@@ -70,7 +70,7 @@ def test_detect_with_vol3_returns_windows_details(mock_build, mock_run, mock_par
         {"Variable": "NtProductType", "Value": "WinNt"},
     ]
 
-    result = os_detection._detect_with_vol3("memory.raw", ["vol"])
+    result = os_detection._detect_with_windows_info("memory.raw", ["vol"])
 
     assert result["os"] == "Windows"
     assert result["detected_with"] == "windows.info"
@@ -85,10 +85,10 @@ def test_detect_with_vol3_returns_windows_details(mock_build, mock_run, mock_par
 @patch("vol_for_smes.volatility.os_detection.parse_json_output", return_value=[])
 @patch("vol_for_smes.volatility.os_detection.subprocess.run")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command", return_value=["vol"])
-def test_detect_with_vol3_returns_unknown_when_no_rows(_, mock_run, __):
+def test_detect_with_windows_info_returns_unknown_when_no_rows(_, mock_run, __):
     mock_run.return_value = SimpleNamespace(returncode=0, stdout="[]", stderr="")
 
-    assert os_detection._detect_with_vol3("memory.raw", ["vol"]) == {
+    assert os_detection._detect_with_windows_info("memory.raw", ["vol"]) == {
         "os": "Unknown",
         "details": "No OS information found",
     }
@@ -96,38 +96,11 @@ def test_detect_with_vol3_returns_unknown_when_no_rows(_, mock_run, __):
 
 @patch("vol_for_smes.volatility.os_detection.subprocess.run")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command", return_value=["vol"])
-def test_detect_with_vol3_raises_on_plugin_failure(_, mock_run):
+def test_detect_with_windows_info_raises_on_plugin_failure(_, mock_run):
     mock_run.return_value = SimpleNamespace(returncode=1, stdout="", stderr="failed")
 
     with pytest.raises(RuntimeError, match="failed"):
-        os_detection._detect_with_vol3("memory.raw", ["vol"])
-
-
-@patch("vol_for_smes.volatility.os_detection.subprocess.run")
-@patch("vol_for_smes.volatility.os_detection.build_volatility_command")
-def test_detect_with_vol2_returns_profile_details(mock_build, mock_run):
-    mock_build.return_value = ["volatility", "-f", "memory.raw", "imageinfo"]
-    mock_run.return_value = SimpleNamespace(
-        returncode=0,
-        stdout="Suggested Profile(s) : Win10x64_19041, Win10x64",
-        stderr="",
-    )
-
-    result = os_detection._detect_with_vol2("memory.raw", ["volatility"])
-
-    assert result["os"] == "Windows"
-    assert result["profile"] == "Win10x64_19041"
-    assert result["volatility_args"] == ["--profile=Win10x64_19041"]
-    mock_build.assert_called_once_with(["volatility"], ["-f", "memory.raw", "imageinfo"])
-
-
-@patch("vol_for_smes.volatility.os_detection.subprocess.run")
-@patch("vol_for_smes.volatility.os_detection.build_volatility_command", return_value=["volatility"])
-def test_detect_with_vol2_raises_when_profile_missing(_, mock_run):
-    mock_run.return_value = SimpleNamespace(returncode=0, stdout="No profile", stderr="")
-
-    with pytest.raises(RuntimeError, match="did not return a suggested profile"):
-        os_detection._detect_with_vol2("memory.raw", ["volatility"])
+        os_detection._detect_with_windows_info("memory.raw", ["vol"])
 
 
 @patch("vol_for_smes.volatility.os_detection._candidate_commands")
@@ -137,41 +110,24 @@ def test_detect_os_returns_unknown_when_candidate_resolution_fails(mock_candidat
     assert os_detection.detect_os("memory.raw") == {"os": "Unknown", "error": "not installed"}
 
 
-@patch("vol_for_smes.volatility.os_detection._detect_with_vol3")
-@patch("vol_for_smes.volatility.os_detection.detect_volatility_variant")
+@patch("vol_for_smes.volatility.os_detection._detect_with_windows_info")
 @patch("vol_for_smes.volatility.os_detection._candidate_commands")
-def test_detect_os_uses_vol3_detection_by_default(mock_candidates, mock_variant, mock_detect_vol3):
+def test_detect_os_uses_windows_info_detection(mock_candidates, mock_detect_windows_info):
     mock_candidates.return_value = [["vol"]]
-    mock_variant.return_value = "vol3"
-    mock_detect_vol3.return_value = {"os": "Windows"}
+    mock_detect_windows_info.return_value = {"os": "Windows"}
 
     assert os_detection.detect_os("memory.raw") == {"os": "Windows"}
-    mock_detect_vol3.assert_called_once_with("memory.raw", ["vol"])
+    mock_detect_windows_info.assert_called_once_with("memory.raw", ["vol"])
 
 
-@patch("vol_for_smes.volatility.os_detection._detect_with_vol2")
-@patch("vol_for_smes.volatility.os_detection.detect_volatility_variant")
-@patch("vol_for_smes.volatility.os_detection._candidate_commands")
-def test_detect_os_uses_vol2_detection_for_vol2_command(mock_candidates, mock_variant, mock_detect_vol2):
-    mock_candidates.return_value = [["volatility"]]
-    mock_variant.return_value = "vol2"
-    mock_detect_vol2.return_value = {"os": "Windows", "profile": "Win10"}
-
-    assert os_detection.detect_os("memory.raw") == {"os": "Windows", "profile": "Win10"}
-    mock_detect_vol2.assert_called_once_with("memory.raw", ["volatility"])
-
-
-@patch("vol_for_smes.volatility.os_detection._detect_with_vol3")
-@patch("vol_for_smes.volatility.os_detection.detect_volatility_variant")
+@patch("vol_for_smes.volatility.os_detection._detect_with_windows_info")
 @patch("vol_for_smes.volatility.os_detection._candidate_commands")
 def test_detect_os_tries_all_candidates_before_returning_unknown(
     mock_candidates,
-    mock_variant,
-    mock_detect_vol3,
+    mock_detect_windows_info,
 ):
     mock_candidates.return_value = [["vol-a"], ["vol-b"]]
-    mock_variant.return_value = "unknown"
-    mock_detect_vol3.side_effect = [RuntimeError("bad a"), RuntimeError("bad b")]
+    mock_detect_windows_info.side_effect = [RuntimeError("bad a"), RuntimeError("bad b")]
 
     result = os_detection.detect_os("memory.raw")
 

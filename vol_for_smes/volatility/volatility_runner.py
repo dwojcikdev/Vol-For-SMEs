@@ -3,7 +3,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .command_resolver import (
     build_volatility_command,
-    detect_volatility_variant,
     parse_json_output,
     resolve_volatility_command,
 )
@@ -16,7 +15,6 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         self.volatility_command = list(
             self.os_context.get("volatility_command") or resolve_volatility_command(volatility_path)
         )
-        self.volatility_variant = self.os_context.get("volatility_variant") or detect_volatility_variant(self.volatility_command)
 
     def _base_args(self):
         args = ["--renderer", "json"]
@@ -131,4 +129,3 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         print(f"Total plugin execution time: {overall_minutes}m {overall_seconds:.2f}s")
         
         return results
-

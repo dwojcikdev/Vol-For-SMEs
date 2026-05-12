@@ -1,8 +1,6 @@
 import subprocess
-import re
 from .command_resolver import build_volatility_command, resolve_volatility_command
 from .command_resolver import (
-    detect_volatility_variant,
     discover_volatility_commands,
     parse_json_output,
 )
@@ -29,7 +27,7 @@ def _candidate_commands(volatility_path):
     return commands
 
 
-def _detect_with_vol3(memory_path, volatility_command):
+def _detect_with_windows_info(memory_path, volatility_command):
     used_plugin = "windows.info"
     command = build_volatility_command(
         volatility_command,
@@ -54,7 +52,6 @@ def _detect_with_vol3(memory_path, volatility_command):
         "os": "Windows",
         "detected_with": used_plugin,
         "volatility_command": list(volatility_command),
-        "volatility_variant": "vol3",
         "volatility_args": [],
     }
 
@@ -88,7 +85,7 @@ def detect_os(memory_path, volatility_path="vol"):
     errors = []
     for volatility_command in commands:
         try:
-            return _detect_with_vol3(memory_path, volatility_command)
+            return _detect_with_windows_info(memory_path, volatility_command)
         except Exception as exc:
             errors.append(f"[{' '.join(volatility_command)}] {str(exc)}")
             continue

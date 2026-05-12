@@ -4,6 +4,7 @@
 PLUGINS = {
     "windows.pslist": "Show running processes remembered in memory.",
     "windows.psscan": "Find processes by scanning memory directly, even if hidden.",
+    "windows.pstree": "Show parent-child process relationships to help spot suspicious launches.",
     "windows.dlllist": "List loaded DLLs for each process to help spot suspicious modules.",
     "windows.cmdline": "Show the command line used to start each process.",
     "windows.handles": "List open files, registry keys, and other objects used by processes.",
@@ -26,8 +27,11 @@ PLUGIN_GROUPS = {
     "process_analysis": [
         "windows.pslist",
         "windows.psscan",
+        "windows.pstree",
         "windows.cmdline",
-        "windows.dlllist"
+        "windows.dlllist",
+        "windows.malfind",
+        "windows.netscan",
     ],
 
     "network_analysis": [
@@ -56,6 +60,8 @@ PLUGIN_GROUPS = {
     # Default investigation used by Vol For SMEs
     "default_investigation": [
         "windows.pslist",
+        "windows.psscan",
+        "windows.pstree",
         "windows.cmdline",
         "windows.netscan",
         "windows.malfind",

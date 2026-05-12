@@ -41,7 +41,6 @@ def display_os_detection_result(os_info):
         return
 
     detected_with = os_info.get("detected_with", "unknown plugin")
-    variant = os_info.get("volatility_variant", "unknown")
     architecture = os_info.get("architecture")
     major_version = os_info.get("major_version")
     minor_version = os_info.get("minor_version")
@@ -58,7 +57,6 @@ def display_os_detection_result(os_info):
     if profile:
         print(f"Profile: {profile}")
     print(f"Detected using: {detected_with}")
-    print(f"Volatility version: {variant}")
 
 
 def run_default_investigation(memory_image):
@@ -263,5 +261,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

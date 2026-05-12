@@ -107,21 +107,3 @@ def resolve_volatility_command(volatility_path=None):
 
 def build_volatility_command(volatility_command, extra_args):
     return build_command(volatility_command, extra_args)
-
-
-def detect_volatility_variant(volatility_command):
-    try:
-        result = subprocess.run(
-            list(volatility_command) + ["--help"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (FileNotFoundError, PermissionError, OSError, subprocess.TimeoutExpired):
-        return "unknown"
-
-    output = f"{result.stdout}\n{result.stderr}".lower()
-    if "volatility 3 framework" in output:
-        return "vol3"
-    return "unknown"

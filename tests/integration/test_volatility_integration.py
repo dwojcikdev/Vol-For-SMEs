@@ -69,7 +69,6 @@ def test_volatility_command_resolves(volatility_command):
 def test_detect_os_with_real_memory_image(detected_os, volatility_command):
     assert detected_os.get("os") == "Windows"
     assert detected_os.get("volatility_command") == volatility_command
-    assert detected_os.get("volatility_variant") in {"vol2", "vol3"}
 
 
 def test_configured_plugins_are_known_or_custom():

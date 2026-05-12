@@ -12,7 +12,6 @@ def test_display_os_detection_result_shows_human_readable_windows_summary(mock_p
             "major_version": 10,
             "minor_version": 0,
             "detected_with": "windows.info",
-            "volatility_variant": "vol3",
         }
     )
 

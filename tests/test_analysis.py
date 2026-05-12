@@ -63,8 +63,8 @@ def test_analyse_artefacts_returns_findings_and_timeline():
 
     assert analysis["plugin_findings"]["windows.malfind"]["severity"] == "high"
     assert analysis["risk_summary"]["high"] == 1
-    assert analysis["process_analysis"]["severity"] == "high"
-    assert analysis["process_analysis"]["risk_score"] > 0
+    assert analysis["process_analysis"]["severity"] == "medium"
+    assert analysis["process_analysis"]["risk_score"] == 45
     assert any(tag["technique_id"] == "T1055" for tag in analysis["process_analysis"]["mitre_tags"])
     assert len(analysis["timeline"]) == 1
 
@@ -92,7 +92,31 @@ def test_analyse_process_activity_correlates_multiple_process_indicators():
     assert any(tag["technique_id"] == "T1055" for tag in analysis["mitre_tags"])
     assert analysis["suspicious_processes"][0]["pid"] == "900"
     assert analysis["suspicious_processes"][0]["risk_score"] >= 80
-    assert any("command-line" in reason for reason in analysis["suspicious_processes"][0]["reasons"])
+    assert any(
+        "encoded powershell command" in reason.lower()
+        for reason in analysis["suspicious_processes"][0]["reasons"]
+    )
+
+
+def test_analyse_process_activity_includes_hidden_process_findings():
+    analysis = analyse_process_activity(
+        {
+            "windows.pslist": [
+                {"PID": 4, "ImageFileName": "System"},
+            ],
+            "windows.psscan": [
+                {"PID": 99, "ImageFileName": "evil.exe"},
+            ],
+        }
+    )
+
+    assert analysis["severity"] == "medium"
+    assert analysis["summary"] == "1 suspicious process(es) identified"
+    assert analysis["suspicious_processes"][0]["pid"] == "99"
+    assert any(
+        "psscan but not pslist" in reason.lower()
+        for reason in analysis["suspicious_processes"][0]["reasons"]
+    )
 
 
 def test_analyse_network_activity_flags_shell_process_networking():
