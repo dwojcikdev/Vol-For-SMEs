@@ -1,14 +1,31 @@
 from .volatility_runner import VolatilityRunner
-from .plugin_manager import PLUGINS, PLUGIN_GROUPS
+from .plugin_manager import (
+    DEFAULT_PLUGIN_GROUP_NAME,
+    PLUGINS,
+    PLUGIN_GROUPS,
+    PluginInfo,
+    build_plugin_catalog,
+    discover_volatility_plugins,
+    get_builtin_plugin_groups,
+    get_curated_plugin_catalog,
+    validate_plugin_names,
+)
 from .results_parser import parse_processes
 from .os_detection import detect_os
 from .command_resolver import resolve_volatility_command
 
 __all__ = [
+    "DEFAULT_PLUGIN_GROUP_NAME",
     "VolatilityRunner",
     "PLUGINS",
     "PLUGIN_GROUPS",
+    "PluginInfo",
+    "build_plugin_catalog",
     "parse_processes",
     "detect_os",
+    "discover_volatility_plugins",
+    "get_builtin_plugin_groups",
+    "get_curated_plugin_catalog",
     "resolve_volatility_command",
+    "validate_plugin_names",
 ]

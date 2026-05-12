@@ -1,13 +1,14 @@
 from pathlib import Path
 
 from .volatility import (
+    DEFAULT_PLUGIN_GROUP_NAME,
     VolatilityRunner,
-    PLUGIN_GROUPS,
     parse_processes,
     detect_os,
     resolve_volatility_command,
 )
 from .analysis import analyse_artefacts
+from .config.settings import PluginPreset, get_plugin_preset
 from .reporting import export_analysis_to_pdf
 
 
@@ -59,11 +60,18 @@ def display_os_detection_result(os_info):
     print(f"Detected using: {detected_with}")
 
 
-def run_default_investigation(memory_image):
+def run_investigation(memory_image, preset_name=DEFAULT_PLUGIN_GROUP_NAME, settings_path=None):
     volatility_command = resolve_project_volatility_command()
     if volatility_command is None:
         print("\nInvestigation could not start.")
-        return
+        return None, None
+
+    try:
+        preset = get_plugin_preset(preset_name, settings_path)
+    except KeyError:
+        print(f"\nPlugin preset '{preset_name}' was not found.")
+        print("\nInvestigation could not start.")
+        return None, None
 
     print("\nVolatility command resolved:")
     print(" ".join(volatility_command))
@@ -76,24 +84,35 @@ def run_default_investigation(memory_image):
 
     if "error" in os_info:
         print("\nInvestigation could not start.")
-        return
+        return None, preset
 
     if os_info.get("os") != "Windows":
         print("\nUnsupported operating system.")
-        return
+        return None, preset
 
     print("\nInitialising Volatility runner...\n")
 
     runner = VolatilityRunner(memory_image, volatility_command, os_context=os_info)
 
-    plugins = PLUGIN_GROUPS["default_investigation"]
+    plugins = list(preset.plugins)
 
-    print("Running default investigation plugins:\n")
+    print(
+        f"Running plugin preset '{preset.name}' "
+        f"with {len(plugins)} plugin(s):\n"
+    )
+    for plugin in plugins:
+        print(f"- {plugin}")
+    print()
 
     results = runner.run_multiple(plugins)
 
     print("\nPlugin execution complete.\n")
 
+    return results, preset
+
+
+def run_default_investigation(memory_image):
+    results, _ = run_investigation(memory_image, DEFAULT_PLUGIN_GROUP_NAME)
     return results
 
 
@@ -215,7 +234,16 @@ def _default_report_path(memory_image):
     return Path.cwd() / f"{stem}_report.pdf"
 
 
-def prompt_and_export_report(analysis, memory_image):
+def _build_report_case_metadata(memory_image, preset: PluginPreset | None = None):
+    case_metadata = {"memory_image": memory_image}
+    if preset is not None:
+        case_metadata["plugin_preset"] = preset.name
+        case_metadata["plugin_count"] = len(preset.plugins)
+        case_metadata["plugins_run"] = ", ".join(preset.plugins)
+    return case_metadata
+
+
+def prompt_and_export_report(analysis, memory_image, preset=None):
     response = input("Export analysis report to PDF? [Y/n]: ").strip().lower()
     if response not in {"", "y", "yes"}:
         print("PDF export skipped.")
@@ -231,7 +259,7 @@ def prompt_and_export_report(analysis, memory_image):
         written_path = export_analysis_to_pdf(
             analysis,
             output_path,
-            case_metadata={"memory_image": memory_image},
+            case_metadata=_build_report_case_metadata(memory_image, preset),
         )
     except OSError as exc:
         print(f"Could not export PDF report: {exc}")
@@ -246,8 +274,10 @@ def main():
     print("Vol For SMEs - Memory Forensics Tool\n")
 
     memory_image = input("Enter memory image path: ").strip()
-
-    results = run_default_investigation(memory_image)
+    results, selected_preset = run_investigation(
+        memory_image,
+        DEFAULT_PLUGIN_GROUP_NAME,
+    )
 
     if not results:
         return
@@ -256,9 +286,8 @@ def main():
 
     display_analysis_results(analysis)
     display_process_results(results)
-    prompt_and_export_report(analysis, memory_image)
+    prompt_and_export_report(analysis, memory_image, selected_preset)
 
 
 if __name__ == "__main__":
     main()
-
