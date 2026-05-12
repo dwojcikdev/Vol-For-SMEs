@@ -109,7 +109,7 @@ def test_display_analysis_results_shows_summary_findings_and_timeline(mock_print
 @patch("vol_for_smes.main.display_process_results")
 @patch("vol_for_smes.main.display_analysis_results")
 @patch("vol_for_smes.main.prompt_and_export_report")
-@patch("vol_for_smes.main.analyse_artifacts")
+@patch("vol_for_smes.main.analyse_artefacts")
 @patch("vol_for_smes.main.run_default_investigation")
 @patch("builtins.input", return_value="memory.raw")
 @patch("builtins.print")
@@ -117,7 +117,7 @@ def test_main_runs_analysis_before_displaying_processes(
     _print,
     _input,
     mock_run_default_investigation,
-    mock_analyse_artifacts,
+    mock_analyse_artefacts,
     mock_prompt_and_export_report,
     mock_display_analysis_results,
     mock_display_process_results,
@@ -125,11 +125,11 @@ def test_main_runs_analysis_before_displaying_processes(
     results = {"windows.pslist": [{"PID": 4, "ImageFileName": "System"}]}
     analysis = {"plugin_findings": {}, "risk_summary": {}, "timeline": []}
     mock_run_default_investigation.return_value = results
-    mock_analyse_artifacts.return_value = analysis
+    mock_analyse_artefacts.return_value = analysis
 
     main.main()
 
-    mock_analyse_artifacts.assert_called_once_with(results)
+    mock_analyse_artefacts.assert_called_once_with(results)
     mock_display_analysis_results.assert_called_once_with(analysis)
     mock_display_process_results.assert_called_once_with(results)
     mock_prompt_and_export_report.assert_called_once_with(analysis, "memory.raw")

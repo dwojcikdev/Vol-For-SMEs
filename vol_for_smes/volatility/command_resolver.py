@@ -40,7 +40,7 @@ def _discover_installation_command():
     install_root = _volatility_installation_root()
     raise RuntimeError(
         f"No runnable Volatility executable was found under '{install_root}'. "
-        "Expected Volatility 3 (vol.py/vol.exe) or Volatility 2 (.exe)."
+        "Expected Volatility 3 (vol.py/vol.exe)."
     )
 
 
@@ -66,17 +66,6 @@ def discover_volatility_commands():
             continue
         command = _resolve_script_command(candidate)
         if command:
-            candidates.append(command)
-
-    # Add Volatility 2 standalone executables.
-    for candidate in install_root.rglob("*.exe"):
-        name = candidate.name.lower()
-        if "volatility" not in name:
-            continue
-        if "volatility_2" not in name and "volatility2" not in name:
-            continue
-        command = [str(candidate)]
-        if can_invoke_command(command):
             candidates.append(command)
 
     seen = set()
@@ -135,6 +124,4 @@ def detect_volatility_variant(volatility_command):
     output = f"{result.stdout}\n{result.stderr}".lower()
     if "volatility 3 framework" in output:
         return "vol3"
-    if "volatility foundation volatility framework 2" in output:
-        return "vol2"
     return "unknown"

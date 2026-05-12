@@ -1,5 +1,5 @@
 from vol_for_smes.analysis import (
-    analyse_artifacts,
+    analyse_artefacts,
     analyse_network_activity,
     analyse_plugin_output,
     analyse_process_activity,
@@ -53,8 +53,8 @@ def test_build_timeline_extracts_and_sorts_timestamp_events():
     ]
 
 
-def test_analyse_artifacts_returns_findings_and_timeline():
-    analysis = analyse_artifacts(
+def test_analyse_artefacts_returns_findings_and_timeline():
+    analysis = analyse_artefacts(
         {
             "windows.malfind": [{"PID": 444, "ImageFileName": "suspect.exe"}],
             "windows.pslist": [{"PID": 444, "ImageFileName": "suspect.exe", "CreateTime": "2024-01-01 10:00:00 UTC"}],

@@ -8,24 +8,6 @@ from .command_resolver import (
     resolve_volatility_command,
 )
 
-VOL2_PLUGIN_MAP = {
-    "windows.pslist": "pslist",
-    "windows.psscan": "psscan",
-    "windows.dlllist": "dlllist",
-    "windows.cmdline": "cmdline",
-    "windows.handles": "handles",
-    "windows.netscan": "netscan",
-    "windows.sockets": "sockets",
-    "windows.filescan": "filescan",
-    "windows.malfind": "malfind",
-    "windows.vadinfo": "vadinfo",
-    "windows.ssdt": "ssdt",
-    "windows.modules": "modules",
-    "windows.shimcache": "shimcache",
-    "windows.svcscan": "svcscan",
-    "windows.getsids": "getsids",
-}
-
 class VolatilityRunner: # Wrapper for running Volatility plugins and handling their output
 
     def __init__(self, memory_path, volatility_path="vol", os_context=None):
@@ -37,21 +19,11 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         self.volatility_variant = self.os_context.get("volatility_variant") or detect_volatility_variant(self.volatility_command)
 
     def _base_args(self):
-        args = []
-        if self.volatility_variant == "vol3":
-            args.extend(["--renderer", "json"])
-        else:
-            args.extend(["--output=json"])
-
+        args = ["--renderer", "json"]
         extra = self.os_context.get("volatility_args") or []
         args.extend(extra)
         args.extend(["-f", self.memory_path])
         return args
-
-    def _translate_plugin(self, plugin):
-        if self.volatility_variant == "vol2":
-            return VOL2_PLUGIN_MAP.get(plugin, plugin)
-        return plugin
 
     def _format_plugin_error(self, error_text):
         message = str(error_text or "").strip()
@@ -72,11 +44,9 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         return f"This plugin could not be completed. {message}"
 
     def run_plugin(self, plugin):
-        translated_plugin = self._translate_plugin(plugin)
-
         command = build_volatility_command(
             self.volatility_command,
-            self._base_args() + [translated_plugin]
+            self._base_args() + [plugin]
         )
 
         try:
@@ -116,7 +86,6 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
         results = {}
         
         def run_single_plugin(name, plugin):
-            translated_plugin = self._translate_plugin(plugin)
             print(f"[{name}] running...")
             start_time = time.time()
             try:

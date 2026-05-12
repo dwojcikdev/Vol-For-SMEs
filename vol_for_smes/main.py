@@ -7,7 +7,7 @@ from .volatility import (
     detect_os,
     resolve_volatility_command,
 )
-from .analysis import analyse_artifacts
+from .analysis import analyse_artefacts
 from .reporting import export_analysis_to_pdf
 
 
@@ -254,7 +254,7 @@ def main():
     if not results:
         return
 
-    analysis = analyse_artifacts(results)
+    analysis = analyse_artefacts(results)
 
     display_analysis_results(analysis)
     display_process_results(results)

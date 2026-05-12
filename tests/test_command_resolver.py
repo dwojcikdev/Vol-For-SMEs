@@ -110,7 +110,6 @@ def test_discover_installation_command_raises_when_no_command_found(
 def test_discover_volatility_commands_finds_supported_entrypoints(_, tmp_path):
     (tmp_path / "vol.exe").write_text("", encoding="utf-8")
     (tmp_path / "vol.py").write_text("", encoding="utf-8")
-    (tmp_path / "volatility_2.6.exe").write_text("", encoding="utf-8")
     (tmp_path / "other.exe").write_text("", encoding="utf-8")
 
     with patch(
@@ -124,7 +123,6 @@ def test_discover_volatility_commands_finds_supported_entrypoints(_, tmp_path):
 
     assert [str(tmp_path / "vol.exe")] in commands
     assert ["python", str(tmp_path / "vol.py")] in commands
-    assert [str(tmp_path / "volatility_2.6.exe")] in commands
     assert [str(tmp_path / "other.exe")] not in commands
 
 

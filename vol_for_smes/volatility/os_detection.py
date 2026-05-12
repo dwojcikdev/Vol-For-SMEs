@@ -73,45 +73,6 @@ def _detect_with_vol3(memory_path, volatility_command):
     return os_info
 
 
-def _detect_with_vol2(memory_path, volatility_command):
-    used_plugin = "imageinfo"
-    command = build_volatility_command(
-        volatility_command,
-        ["-f", memory_path, used_plugin],
-    )
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=600
-    )
-    output = f"{result.stdout}\n{result.stderr}"
-    if result.returncode != 0:
-        raise RuntimeError((output or "").strip() or "imageinfo failed")
-
-    suggested_profile = None
-    for line in output.splitlines():
-        if "Suggested Profile(s)" in line:
-            match = re.search(r"Suggested Profile\(s\)\s*:\s*(.+)$", line)
-            if match:
-                candidates = [item.strip() for item in match.group(1).split(",") if item.strip()]
-                if candidates:
-                    suggested_profile = candidates[0]
-            break
-
-    if not suggested_profile:
-        raise RuntimeError("Volatility 2 imageinfo did not return a suggested profile.")
-
-    return {
-        "os": "Windows",
-        "detected_with": used_plugin,
-        "volatility_command": list(volatility_command),
-        "volatility_variant": "vol2",
-        "profile": suggested_profile,
-        "volatility_args": [f"--profile={suggested_profile}"],
-    }
-
-
 def detect_os(memory_path, volatility_path="vol"):
     """
     Attempts to detect the Windows version of a memory image
@@ -126,10 +87,7 @@ def detect_os(memory_path, volatility_path="vol"):
 
     errors = []
     for volatility_command in commands:
-        variant = detect_volatility_variant(volatility_command)
         try:
-            if variant == "vol2":
-                return _detect_with_vol2(memory_path, volatility_command)
             return _detect_with_vol3(memory_path, volatility_command)
         except Exception as exc:
             errors.append(f"[{' '.join(volatility_command)}] {str(exc)}")
