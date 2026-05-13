@@ -1,24 +1,14 @@
 import json
 import os
 import shlex
-import subprocess
 import sys
-from pathlib import Path
 
 from ..utils.helpers import can_invoke_command, parse_json_output, build_command
-from ..utils.file_utils import get_project_root, get_volatility_installation_root, command_from_path_or_text, resolve_script_command
+from ..utils.file_utils import get_project_root, command_from_path_or_text
 
 
 def _project_root():
     return get_project_root()
-
-
-def _volatility_installation_root():
-    return get_volatility_installation_root()
-
-
-def _resolve_script_command(script_path):
-    return resolve_script_command(script_path)
 
 
 def _command_from_path_or_text(value):
@@ -32,40 +22,27 @@ def _resolve_configured_command(value):
     return None
 
 
-def _discover_installation_command():
+def _discover_installed_command():
     commands = discover_volatility_commands()
     if commands:
         return commands[0]
 
-    install_root = _volatility_installation_root()
     raise RuntimeError(
-        f"No runnable Volatility executable was found under '{install_root}'. "
-        "Expected Volatility 3 (vol.py/vol.exe)."
+        "No runnable Volatility 3 command was found. "
+        "Install the 'volatility3' package or configure VOLATILITY_COMMAND/VOLATILITY_PATH."
     )
 
 
 def discover_volatility_commands():
-    install_root = _volatility_installation_root()
-    if not install_root.is_dir():
-        raise RuntimeError(
-            f"Volatility installation folder was not found at '{install_root}'."
-        )
-
     candidates = []
 
-    # Prefer Volatility 3 entrypoints first.
-    for binary_name in ("vol.exe", "vol"):
-        for candidate in install_root.rglob(binary_name):
-            if candidate.is_file():
-                command = [str(candidate)]
-                if can_invoke_command(command):
-                    candidates.append(command)
+    # Prefer the package installed into the current Python environment.
+    module_command = [sys.executable, "-m", "volatility3.cli"]
+    if can_invoke_command(module_command):
+        candidates.append(module_command)
 
-    for candidate in install_root.rglob("vol.py"):
-        if not candidate.is_file():
-            continue
-        command = _resolve_script_command(candidate)
-        if command:
+    for command in (["vol"], ["volatility"]):
+        if can_invoke_command(command):
             candidates.append(command)
 
     seen = set()
@@ -92,16 +69,11 @@ def resolve_volatility_command(volatility_path=None):
             return command
 
     try:
-        return _discover_installation_command()
+        return _discover_installed_command()
     except RuntimeError as installation_error:
-        for command in (["vol"], ["volatility"]):
-            if can_invoke_command(command):
-                return command
-
         raise RuntimeError(
             f"{installation_error} Provide a Volatility command/path, set "
-            "VOLATILITY_COMMAND or VOLATILITY_PATH, install Volatility on PATH, "
-            "or include it in the project volatility_installation folder."
+            "VOLATILITY_COMMAND or VOLATILITY_PATH, or install the 'volatility3' package."
         ) from installation_error
 
 

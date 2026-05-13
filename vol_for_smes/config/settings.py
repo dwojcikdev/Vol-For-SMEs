@@ -1,5 +1,5 @@
 """
-Persistent settings helpers for custom plugin presets.
+Persistent settings helpers for custom plugin presets and GUI preferences.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from ..volatility.plugin_manager import (
 
 SETTINGS_VERSION = 1
 CUSTOM_PLUGIN_GROUPS_KEY = "custom_plugin_groups"
+UI_THEME_KEY = "ui_theme"
+DEFAULT_UI_THEME = "cyber_ocean"
 DEFAULT_SETTINGS_PATH = get_project_root() / "data" / "user_settings.json"
 
 
@@ -38,6 +40,7 @@ def _empty_settings() -> dict:
     return {
         "version": SETTINGS_VERSION,
         CUSTOM_PLUGIN_GROUPS_KEY: {},
+        UI_THEME_KEY: DEFAULT_UI_THEME,
     }
 
 
@@ -57,6 +60,8 @@ def load_settings(settings_path: str | Path | None = None) -> dict:
     groups = merged.get(CUSTOM_PLUGIN_GROUPS_KEY)
     if not isinstance(groups, dict):
         merged[CUSTOM_PLUGIN_GROUPS_KEY] = {}
+    theme_name = str(merged.get(UI_THEME_KEY, DEFAULT_UI_THEME) or "").strip()
+    merged[UI_THEME_KEY] = theme_name or DEFAULT_UI_THEME
 
     return merged
 
@@ -67,6 +72,27 @@ def save_settings(data: Mapping[str, object], settings_path: str | Path | None =
     with path.open("w", encoding="utf-8") as file:
         json.dump(dict(data), file, indent=4)
     return path
+
+
+def get_ui_theme_name(settings_path: str | Path | None = None) -> str:
+    data = load_settings(settings_path)
+    theme_name = str(data.get(UI_THEME_KEY, DEFAULT_UI_THEME) or "").strip()
+    return theme_name or DEFAULT_UI_THEME
+
+
+def save_ui_theme_name(
+    theme_name: str,
+    *,
+    settings_path: str | Path | None = None,
+) -> str:
+    selected_theme = str(theme_name or "").strip()
+    if not selected_theme:
+        raise ValueError("Theme name cannot be empty.")
+
+    data = load_settings(settings_path)
+    data[UI_THEME_KEY] = selected_theme
+    save_settings(data, settings_path)
+    return selected_theme
 
 
 def list_builtin_plugin_presets() -> Dict[str, PluginPreset]:

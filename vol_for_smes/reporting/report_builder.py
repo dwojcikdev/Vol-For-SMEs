@@ -14,6 +14,13 @@ SEVERITY_LABELS = {
     "none": "Informational",
 }
 
+ANALYST_REVIEW_NOTICE = (
+    "These findings are heuristic indicators based on automated memory-forensic checks. "
+    "They are intended to support human investigation, not replace it. "
+    "Review the underlying evidence, surrounding business context, and any corroborating telemetry "
+    "before treating a finding as confirmed malicious activity."
+)
+
 TECHNIQUE_EXPLANATIONS = {
     "T1036": {
         "attack": "Masquerading",
@@ -570,6 +577,7 @@ def _build_triage_report(
     return {
         "title": case_metadata.get("title", "Vol For SMEs Known Malware Triage Report"),
         "case_metadata": case_metadata,
+        "analyst_notice": ANALYST_REVIEW_NOTICE,
         "risk_summary": risk_summary,
         "executive_summary": executive_summary,
         "findings": findings,
@@ -648,6 +656,7 @@ def build_analysis_report(
     return {
         "title": case_metadata.get("title", "Vol For SMEs Memory Analysis Report"),
         "case_metadata": case_metadata,
+        "analyst_notice": ANALYST_REVIEW_NOTICE,
         "risk_summary": analysis.get("risk_summary", {}),
         "executive_summary": _executive_summary(analysis, findings),
         "findings": findings,

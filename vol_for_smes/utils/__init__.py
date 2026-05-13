@@ -15,7 +15,6 @@ from .helpers import (
 
 from .file_utils import (
     get_project_root,
-    get_volatility_installation_root,
     resolve_script_command,
     command_from_path_or_text,
 )
@@ -26,6 +25,6 @@ __all__ = [
     'extract_rows',
 
     # file_utils
-    'get_project_root', 'get_volatility_installation_root', 'resolve_script_command',
+    'get_project_root', 'resolve_script_command',
     'command_from_path_or_text',
 ]

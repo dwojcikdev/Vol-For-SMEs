@@ -20,16 +20,6 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def get_volatility_installation_root() -> Path:
-    """
-    Get the volatility installation directory.
-
-    Returns:
-        Path to volatility installation
-    """
-    return get_project_root() / "volatility_installation"
-
-
 def resolve_script_command(script_path: Path) -> Optional[List[str]]:
     """
     Resolve the command to run a Python script.

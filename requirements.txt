@@ -1,1 +1,11 @@
+# Install local dependencies with:
+# python -m pip install -r requirements.txt
+
+# Runtime GUI dependency
+PyQt6>=6.7
+
+# Runtime memory-forensics dependency
+volatility3>=2.28.0
+
+# Development and test dependency
 pytest>=8

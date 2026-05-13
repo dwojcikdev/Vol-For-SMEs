@@ -60,16 +60,6 @@ def test_project_root_uses_repository_root():
     assert command_resolver._project_root() == expected
 
 
-@patch("vol_for_smes.utils.file_utils.get_project_root")
-def test_volatility_installation_root_is_under_project_root(mock_root):
-    mock_root.return_value = Path("project")
-
-    assert (
-        file_utils.get_volatility_installation_root()
-        == Path("project") / "volatility_installation"
-    )
-
-
 @patch("vol_for_smes.utils.helpers.can_invoke_command")
 def test_resolve_script_command_uses_first_working_launcher(mock_can_invoke):
     mock_can_invoke.side_effect = [False, True]
@@ -87,57 +77,32 @@ def test_resolve_script_command_returns_none_when_no_launcher_works(_):
 
 
 @patch("vol_for_smes.volatility.command_resolver.discover_volatility_commands")
-def test_discover_installation_command_returns_first_discovered_command(mock_discover):
+def test_discover_installed_command_returns_first_discovered_command(mock_discover):
     mock_discover.return_value = [["vol"], ["fallback-vol"]]
 
-    assert command_resolver._discover_installation_command() == ["vol"]
+    assert command_resolver._discover_installed_command() == ["vol"]
 
 
 @patch("vol_for_smes.volatility.command_resolver.discover_volatility_commands")
-@patch("vol_for_smes.volatility.command_resolver._volatility_installation_root")
-def test_discover_installation_command_raises_when_no_command_found(
-    mock_root,
-    mock_discover,
-):
-    mock_root.return_value = Path("missing_install")
+def test_discover_installed_command_raises_when_no_command_found(mock_discover):
     mock_discover.return_value = []
 
-    with pytest.raises(RuntimeError, match="No runnable Volatility executable"):
-        command_resolver._discover_installation_command()
+    with pytest.raises(RuntimeError, match="No runnable Volatility 3 command was found"):
+        command_resolver._discover_installed_command()
 
 
-@patch("vol_for_smes.volatility.command_resolver.can_invoke_command", return_value=True)
-def test_discover_volatility_commands_finds_supported_entrypoints(_, tmp_path):
-    (tmp_path / "vol.exe").write_text("", encoding="utf-8")
-    (tmp_path / "vol.py").write_text("", encoding="utf-8")
-    (tmp_path / "other.exe").write_text("", encoding="utf-8")
+@patch("vol_for_smes.volatility.command_resolver.can_invoke_command")
+def test_discover_volatility_commands_finds_supported_entrypoints(mock_can_invoke):
+    mock_can_invoke.side_effect = [True, False, True]
 
-    with patch(
-        "vol_for_smes.volatility.command_resolver._volatility_installation_root",
-        return_value=tmp_path,
-    ), patch(
-        "vol_for_smes.volatility.command_resolver._resolve_script_command",
-        return_value=["python", str(tmp_path / "vol.py")],
-    ):
-        commands = command_resolver.discover_volatility_commands()
+    commands = command_resolver.discover_volatility_commands()
 
-    assert [str(tmp_path / "vol.exe")] in commands
-    assert ["python", str(tmp_path / "vol.py")] in commands
-    assert [str(tmp_path / "other.exe")] not in commands
+    assert [command_resolver.sys.executable, "-m", "volatility3.cli"] in commands
+    assert ["vol"] not in commands
+    assert ["volatility"] in commands
 
 
-def test_discover_volatility_commands_raises_when_installation_folder_missing(tmp_path):
-    missing_root = tmp_path / "missing"
-
-    with patch(
-        "vol_for_smes.volatility.command_resolver._volatility_installation_root",
-        return_value=missing_root,
-    ):
-        with pytest.raises(RuntimeError, match="folder was not found"):
-            command_resolver.discover_volatility_commands()
-
-
-@patch("vol_for_smes.volatility.command_resolver._discover_installation_command")
+@patch("vol_for_smes.volatility.command_resolver._discover_installed_command")
 def test_resolve_volatility_command_uses_discovered_installation(mock_discover):
     mock_discover.return_value = ["vol"]
 
@@ -158,13 +123,12 @@ def test_resolve_volatility_command_uses_environment_command(_):
     assert command_resolver.resolve_volatility_command() == ["vol", "--quiet"]
 
 
-@patch("vol_for_smes.volatility.command_resolver._discover_installation_command")
-@patch("vol_for_smes.volatility.command_resolver.can_invoke_command")
-def test_resolve_volatility_command_falls_back_to_path_command(mock_can_invoke, mock_discover):
-    mock_discover.side_effect = RuntimeError("missing bundled install")
-    mock_can_invoke.side_effect = [False, True]
+@patch("vol_for_smes.volatility.command_resolver._discover_installed_command")
+def test_resolve_volatility_command_raises_when_no_command_is_available(mock_discover):
+    mock_discover.side_effect = RuntimeError("missing dependency")
 
-    assert command_resolver.resolve_volatility_command() == ["volatility"]
+    with pytest.raises(RuntimeError, match="install the 'volatility3' package"):
+        command_resolver.resolve_volatility_command()
 
 
 def test_build_volatility_command_combines_command_and_args():

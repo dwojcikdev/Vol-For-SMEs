@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Memory forensics helper for small and medium enterprises."
 readme = "README.txt"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "PyQt6>=6.7",
+    "volatility3>=2.28.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -16,11 +19,12 @@ dev = [
 ]
 
 [project.scripts]
-vol-for-smes = "vol_for_smes.main:main"
+vol-for-smes = "vol_for_smes.gui.app:main"
+vol-for-smes-cli = "vol_for_smes.main:main"
 
 [tool.setuptools.packages.find]
 include = ["vol_for_smes*"]
-exclude = ["tests*", "volatility_installation*"]
+exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -156,6 +156,11 @@ def _report_lines(report: Dict[str, object]) -> List[Tuple[str, int]]:
         add_block(str(paragraph), blank_line=False)
     lines.append(("", 11))
 
+    analyst_notice = str(report.get("analyst_notice", "")).strip()
+    if analyst_notice:
+        add_block("Analyst Review Notice", font_size=14)
+        add_block(analyst_notice, blank_line=True)
+
     findings = report.get("findings", [])
     if findings:
         add_block("Detailed Findings", font_size=14, blank_line=True)

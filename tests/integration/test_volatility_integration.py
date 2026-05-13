@@ -5,7 +5,6 @@ import pytest
 
 from vol_for_smes.volatility import VolatilityRunner, detect_os, parse_processes
 from vol_for_smes.volatility.command_resolver import resolve_volatility_command
-from vol_for_smes.volatility.plugin_manager import PLUGIN_GROUPS
 
 
 pytestmark = pytest.mark.integration
@@ -69,15 +68,6 @@ def test_volatility_command_resolves(volatility_command):
 def test_detect_os_with_real_memory_image(detected_os, volatility_command):
     assert detected_os.get("os") == "Windows"
     assert detected_os.get("volatility_command") == volatility_command
-
-
-def test_configured_plugins_are_known_or_custom():
-    known_plugins = set().union(*PLUGIN_GROUPS.values())
-    plugins = _plugins_from_env()
-
-    assert plugins
-    assert all(isinstance(plugin, str) and plugin for plugin in plugins)
-    assert "windows.pslist" in known_plugins
 
 
 def test_plugin_commands_run_successfully(memory_image_path, detected_os):

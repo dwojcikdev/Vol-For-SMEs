@@ -12,6 +12,7 @@ def test_load_settings_returns_empty_structure_when_file_is_missing(tmp_path):
     assert loaded == {
         "version": settings.SETTINGS_VERSION,
         settings.CUSTOM_PLUGIN_GROUPS_KEY: {},
+        settings.UI_THEME_KEY: settings.DEFAULT_UI_THEME,
     }
 
 
@@ -88,3 +89,18 @@ def test_delete_custom_plugin_preset_removes_saved_preset(tmp_path):
 
     assert deleted is True
     assert "custom_network" not in settings.list_custom_plugin_presets(settings_path)
+
+
+def test_save_ui_theme_name_persists_and_can_be_loaded(tmp_path):
+    settings_path = tmp_path / "user_settings.json"
+
+    saved_theme = settings.save_ui_theme_name(
+        "high_contrast_light",
+        settings_path=settings_path,
+    )
+
+    assert saved_theme == "high_contrast_light"
+
+    written = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert written[settings.UI_THEME_KEY] == "high_contrast_light"
+    assert settings.get_ui_theme_name(settings_path) == "high_contrast_light"

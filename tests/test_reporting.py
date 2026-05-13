@@ -161,6 +161,7 @@ def test_build_analysis_report_enriches_findings_with_explanations():
     assert report["findings"][0]["attack"]
     assert report["findings"][0]["meaning"]
     assert report["findings"][0]["remediations"]
+    assert report["analyst_notice"]
     assert report["case_metadata"]["memory_image"] == "sample.raw"
 
 
@@ -198,6 +199,7 @@ def test_export_analysis_to_pdf_writes_pdf_with_expected_sections(tmp_path: Path
     assert written_path == output_path
     assert pdf_bytes.startswith(b"%PDF-1.4")
     assert b"Vol For SMEs Memory Analysis Report" in pdf_bytes
+    assert b"Analyst Review Notice" in pdf_bytes
     assert b"Detailed Findings" in pdf_bytes
     assert b"Recommended remediation" in pdf_bytes
 
@@ -214,4 +216,5 @@ def test_export_analysis_to_pdf_accepts_triage_report_objects(tmp_path: Path):
     assert written_path == output_path
     assert pdf_bytes.startswith(b"%PDF-1.4")
     assert b"Vol For SMEs Known Malware Triage Report" in pdf_bytes
+    assert b"Analyst Review Notice" in pdf_bytes
     assert b"Known malware signature detected" in pdf_bytes
