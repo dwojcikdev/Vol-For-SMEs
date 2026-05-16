@@ -4,7 +4,7 @@ Higher-level process-focused analysis built from multiple Volatility plugins.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, List
 
 from ..utils.helpers import extract_rows
 from .scoring import (
@@ -58,46 +58,6 @@ def _find_first(row: Dict[str, Any], *keys: str) -> Any:
         lowered_key = _safe_lower(key)
         if lowered_key in lowered:
             return lowered[lowered_key]
-    return None
-
-
-def _normalise_clamav_hits(clamav_hits: Iterable[Any] | None) -> List[Dict[str, str]]:
-    hits = []
-    for hit in clamav_hits or ():
-        if isinstance(hit, dict):
-            file_path = _stringify(hit.get("file_path") or hit.get("file"))
-            signature = _stringify(hit.get("signature"))
-        else:
-            file_path = _stringify(getattr(hit, "file_path", ""))
-            signature = _stringify(getattr(hit, "signature", ""))
-
-        if not file_path and not signature:
-            continue
-
-        hits.append(
-            {
-                "file_path": file_path,
-                "signature": signature,
-            }
-        )
-    return hits
-
-
-def _extract_pid_from_text(text: str) -> int | None:
-    import re
-
-    patterns = [
-        r"pid[._-]?(\d+)",
-        r"PID[._-]?(\d+)",
-        r"process[._-]?(\d+)",
-        r"\.(\d{2,6})\.",
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, str(text or ""))
-        if match:
-            return _safe_int(match.group(1))
-
     return None
 
 
@@ -409,37 +369,6 @@ def _apply_network_score(
         )
 
 
-def _apply_clamav_score(
-    processes: Dict[int, Dict[str, Any]],
-    clamav_hits: Iterable[Any] | None,
-) -> None:
-    scored_pids = set()
-
-    for hit in _normalise_clamav_hits(clamav_hits):
-        pid = _extract_pid_from_text(hit["file_path"])
-        if pid is None:
-            continue
-
-        if pid not in processes:
-            processes[pid] = _new_process(pid)
-
-        process = processes[pid]
-        if pid not in scored_pids:
-            process["score"] += 60
-            scored_pids.add(pid)
-
-        signature = hit["signature"] or "unknown signature"
-        _append_reason(process, f"ClamAV detected known malware signature: {signature}")
-        _append_evidence(
-            process,
-            "clamav_hits",
-            {
-                "file": hit["file_path"],
-                "signature": signature,
-            },
-        )
-
-
 def _build_process_techniques(process: Dict[str, Any]) -> List[str]:
     evidence = process.get("evidence", {})
     paths = [
@@ -449,8 +378,6 @@ def _build_process_techniques(process: Dict[str, Any]) -> List[str]:
     ]
     texts = list(process.get("reasons", []))
 
-    if evidence.get("clamav_hits"):
-        texts.append("known malware signature detected")
     if evidence.get("network_connections"):
         texts.append("external network connection")
     if process.get("name") in LOLBIN_PROCESSES:
@@ -478,8 +405,6 @@ def _build_process_techniques(process: Dict[str, Any]) -> List[str]:
 
 def build_suspicious_process_findings(
     results: Dict[str, Any],
-    *,
-    clamav_hits: Iterable[Any] | None = None,
 ) -> List[Dict[str, Any]]:
     pslist_rows = _normalise_rows(results.get("windows.pslist", []))
     psscan_rows = _normalise_rows(results.get("windows.psscan", []))
@@ -503,7 +428,6 @@ def build_suspicious_process_findings(
     _apply_dlllist_score(processes, dlllist_rows)
     _apply_malfind_score(processes, malfind_rows)
     _apply_network_score(processes, network_rows)
-    _apply_clamav_score(processes, clamav_hits)
 
     findings = []
     for process in processes.values():
