@@ -14,9 +14,20 @@ __pycache__/
 .pytest-work/
 .pytest-work-cli/
 .pytest-work-reporting/
+.pytest-work-codex/
+.pytest-work-local/
+.pytest-legacy-smoke/
+.pytest-run-*/
+basetemp_*/
+pytest-cache-files-*/
+.tmp_pytest_gui/
+.codex-pytest-temp/
 .coverage
 htmlcov/
 coverage.xml
+
+# Local application settings
+data/user_settings.json
 
 # Virtual environments
 .venv/

@@ -1,8 +1,9 @@
 from .settings import (
     CUSTOM_PLUGIN_GROUPS_KEY,
-    DEFAULT_UI_THEME,
     DEFAULT_SETTINGS_PATH,
+    DEFAULT_UI_THEME,
     PluginPreset,
+    UI_THEME_KEY,
     delete_custom_plugin_preset,
     get_plugin_preset,
     get_settings_path,
@@ -12,16 +13,16 @@ from .settings import (
     list_plugin_presets,
     load_settings,
     save_custom_plugin_preset,
-    save_ui_theme_name,
     save_settings,
-    UI_THEME_KEY,
+    save_ui_theme_name,
 )
 
 __all__ = [
     "CUSTOM_PLUGIN_GROUPS_KEY",
-    "DEFAULT_UI_THEME",
     "DEFAULT_SETTINGS_PATH",
+    "DEFAULT_UI_THEME",
     "PluginPreset",
+    "UI_THEME_KEY",
     "delete_custom_plugin_preset",
     "get_plugin_preset",
     "get_settings_path",
@@ -31,7 +32,6 @@ __all__ = [
     "list_plugin_presets",
     "load_settings",
     "save_custom_plugin_preset",
-    "save_ui_theme_name",
     "save_settings",
-    "UI_THEME_KEY",
+    "save_ui_theme_name",
 ]

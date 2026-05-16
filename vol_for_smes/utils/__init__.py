@@ -14,9 +14,14 @@ from .helpers import (
 )
 
 from .file_utils import (
+    get_app_data_dir,
+    get_local_app_data_dir,
     get_project_root,
+    get_reports_dir,
+    get_runtime_python_executable,
     resolve_script_command,
     command_from_path_or_text,
+    build_memory_image_metadata,
 )
 
 __all__ = [
@@ -25,6 +30,7 @@ __all__ = [
     'extract_rows',
 
     # file_utils
-    'get_project_root', 'resolve_script_command',
-    'command_from_path_or_text',
+    'get_app_data_dir', 'get_local_app_data_dir', 'get_project_root', 'get_reports_dir',
+    'get_runtime_python_executable', 'resolve_script_command',
+    'command_from_path_or_text', 'build_memory_image_metadata',
 ]

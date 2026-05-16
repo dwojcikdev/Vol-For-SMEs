@@ -30,8 +30,7 @@ exclude = ["tests*"]
 pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-ra --basetemp=.pytest-work"
+addopts = "-ra"
 markers = [
     "integration: tests that run real Volatility commands against a memory image",
 ]
-

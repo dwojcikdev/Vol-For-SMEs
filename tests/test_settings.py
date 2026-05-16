@@ -104,3 +104,29 @@ def test_save_ui_theme_name_persists_and_can_be_loaded(tmp_path):
     written = json.loads(settings_path.read_text(encoding="utf-8"))
     assert written[settings.UI_THEME_KEY] == "high_contrast_light"
     assert settings.get_ui_theme_name(settings_path) == "high_contrast_light"
+
+def test_load_settings_uses_repo_settings_fallback_when_default_file_is_missing(
+    tmp_path,
+    monkeypatch,
+):
+    default_settings_path = tmp_path / "AppData" / "Vol For SMEs" / "user_settings.json"
+    repo_settings_path = tmp_path / "data" / "user_settings.json"
+    repo_settings_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_settings_path.write_text(
+        json.dumps(
+            {
+                "version": settings.SETTINGS_VERSION,
+                settings.CUSTOM_PLUGIN_GROUPS_KEY: {},
+                settings.UI_THEME_KEY: "forensic_slate",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(settings, "DEFAULT_SETTINGS_PATH", default_settings_path)
+    monkeypatch.setattr(settings, "PROJECT_SETTINGS_FALLBACK_PATH", repo_settings_path)
+
+    loaded = settings.load_settings()
+
+    assert loaded[settings.UI_THEME_KEY] == "forensic_slate"
+    assert settings.get_settings_path() == default_settings_path

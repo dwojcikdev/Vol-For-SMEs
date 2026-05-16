@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Mapping
 
-from ..utils.file_utils import get_project_root
+from ..utils.file_utils import get_app_data_dir, get_project_root
 from ..volatility.plugin_manager import (
     DEFAULT_PLUGIN_GROUP_NAME,
     get_builtin_plugin_groups,
@@ -20,7 +20,8 @@ SETTINGS_VERSION = 1
 CUSTOM_PLUGIN_GROUPS_KEY = "custom_plugin_groups"
 UI_THEME_KEY = "ui_theme"
 DEFAULT_UI_THEME = "cyber_ocean"
-DEFAULT_SETTINGS_PATH = get_project_root() / "data" / "user_settings.json"
+DEFAULT_SETTINGS_PATH = get_app_data_dir() / "user_settings.json"
+PROJECT_SETTINGS_FALLBACK_PATH = get_project_root() / "data" / "user_settings.json"
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,10 @@ def _empty_settings() -> dict:
 def load_settings(settings_path: str | Path | None = None) -> dict:
     path = get_settings_path(settings_path)
     if not path.is_file():
-        return _empty_settings()
+        if settings_path is None and PROJECT_SETTINGS_FALLBACK_PATH.is_file():
+            path = PROJECT_SETTINGS_FALLBACK_PATH
+        else:
+            return _empty_settings()
 
     with path.open("r", encoding="utf-8") as file:
         data = json.load(file)
@@ -62,7 +66,6 @@ def load_settings(settings_path: str | Path | None = None) -> dict:
         merged[CUSTOM_PLUGIN_GROUPS_KEY] = {}
     theme_name = str(merged.get(UI_THEME_KEY, DEFAULT_UI_THEME) or "").strip()
     merged[UI_THEME_KEY] = theme_name or DEFAULT_UI_THEME
-
     return merged
 
 
@@ -131,7 +134,9 @@ def list_custom_plugin_presets(
     return presets
 
 
-def list_plugin_presets(settings_path: str | Path | None = None) -> Dict[str, PluginPreset]:
+def list_plugin_presets(
+    settings_path: str | Path | None = None,
+) -> Dict[str, PluginPreset]:
     presets = list_builtin_plugin_presets()
     presets.update(list_custom_plugin_presets(settings_path))
     return presets
