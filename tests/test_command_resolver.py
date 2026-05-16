@@ -22,6 +22,7 @@ def test_can_invoke_returns_true_for_zero_exit(mock_run):
         text=True,
         timeout=8,
         check=False,
+        **helpers.get_subprocess_run_kwargs(),
     )
 
 
@@ -97,7 +98,11 @@ def test_discover_volatility_commands_finds_supported_entrypoints(mock_can_invok
 
     commands = command_resolver.discover_volatility_commands()
 
-    assert [command_resolver.sys.executable, "-m", "volatility3.cli"] in commands
+    assert [
+        str(command_resolver.get_runtime_python_executable(prefer_console=True)),
+        "-m",
+        "vol_for_smes.volatility.runtime_cli",
+    ] in commands
     assert ["vol"] not in commands
     assert ["volatility"] in commands
 

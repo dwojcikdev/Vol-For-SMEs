@@ -4,7 +4,11 @@ import shlex
 import sys
 
 from ..utils.helpers import can_invoke_command, parse_json_output, build_command
-from ..utils.file_utils import get_project_root, command_from_path_or_text
+from ..utils.file_utils import (
+    command_from_path_or_text,
+    get_project_root,
+    get_runtime_python_executable,
+)
 
 
 def _project_root():
@@ -37,7 +41,11 @@ def discover_volatility_commands():
     candidates = []
 
     # Prefer the package installed into the current Python environment.
-    module_command = [sys.executable, "-m", "volatility3.cli"]
+    module_command = [
+        str(get_runtime_python_executable(prefer_console=True)),
+        "-m",
+        "vol_for_smes.volatility.runtime_cli",
+    ]
     if can_invoke_command(module_command):
         candidates.append(module_command)
 
