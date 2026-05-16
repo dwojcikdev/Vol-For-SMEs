@@ -6,6 +6,7 @@ from .command_resolver import (
     parse_json_output,
     resolve_volatility_command,
 )
+from ..utils.helpers import get_subprocess_run_kwargs
 
 class VolatilityRunner: # Wrapper for running Volatility plugins and handling their output
 
@@ -51,7 +52,8 @@ class VolatilityRunner: # Wrapper for running Volatility plugins and handling th
             result = subprocess.run(
                 command,
                 capture_output=True,
-                text=True
+                text=True,
+                **get_subprocess_run_kwargs(),
             )
         except FileNotFoundError as exc:
             raise RuntimeError(

@@ -76,6 +76,29 @@ def test_build_plugin_catalog_falls_back_to_curated_plugins(_mock_discover):
     assert catalog["windows.pslist"].source == "curated"
 
 
+def test_filter_user_plugin_catalog_keeps_windows_plugins_only():
+    catalog = {
+        "windows.pslist": plugin_manager.PluginInfo(
+            name="windows.pslist",
+            os_family="windows",
+        ),
+        "linux.pslist": plugin_manager.PluginInfo(
+            name="linux.pslist",
+            os_family="linux",
+        ),
+        "frameworkinfo.FrameworkInfo": plugin_manager.PluginInfo(
+            name="frameworkinfo.FrameworkInfo",
+            os_family="cross-platform",
+        ),
+    }
+
+    filtered = plugin_manager.filter_user_plugin_catalog(catalog)
+
+    assert filtered == {
+        "windows.pslist": catalog["windows.pslist"],
+    }
+
+
 def test_validate_plugin_names_accepts_aliases_and_deduplicates():
     catalog = {
         "windows.pslist": plugin_manager.PluginInfo(
@@ -105,3 +128,4 @@ def test_validate_plugin_names_rejects_unknown_plugins():
             ["windows.unknown"],
             plugin_catalog=plugin_manager.get_curated_plugin_catalog(),
         )
+

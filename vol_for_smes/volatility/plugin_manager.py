@@ -10,9 +10,8 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, Mapping, Sequence
 
 from .command_resolver import build_volatility_command, resolve_volatility_command
+from ..utils.helpers import get_subprocess_run_kwargs
 
-# Dictionary of common Volatility plugins with simple descriptions
-# Designed for users with limited memory forensics knowledge.
 PLUGINS = {
     "windows.pslist": "Show running processes remembered in memory.",
     "windows.psscan": "Find processes by scanning memory directly, even if hidden.",
@@ -32,8 +31,6 @@ PLUGINS = {
     "windows.getsids": "Show security identifiers for processes, useful for checking account use.",
 }
 
-
-# Plugin groups for common investigation workflows.
 PLUGIN_GROUPS = {
     "process_analysis": [
         "windows.pslist",
@@ -63,7 +60,6 @@ PLUGIN_GROUPS = {
         "windows.filescan",
         "windows.shimcache",
     ],
-    # Default investigation used by Vol For SMEs.
     "default_investigation": [
         "windows.pslist",
         "windows.psscan",
@@ -157,6 +153,20 @@ def get_curated_plugin_catalog() -> Dict[str, PluginInfo]:
     }
 
 
+def filter_user_plugin_catalog(
+    plugin_catalog: Mapping[str, PluginInfo],
+) -> Dict[str, PluginInfo]:
+    return {
+        plugin_name: plugin_info
+        for plugin_name, plugin_info in plugin_catalog.items()
+        if plugin_info.os_family == "windows"
+    }
+
+
+def get_user_curated_plugin_catalog() -> Dict[str, PluginInfo]:
+    return filter_user_plugin_catalog(get_curated_plugin_catalog())
+
+
 def _preferred_catalog_name(plugin_name: str, curated_catalog: Mapping[str, PluginInfo]) -> str:
     for curated_name in sorted(curated_catalog, key=len, reverse=True):
         if plugin_name == curated_name:
@@ -244,6 +254,7 @@ def discover_volatility_plugins(
         text=True,
         timeout=timeout,
         check=False,
+        **get_subprocess_run_kwargs(),
     )
     output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
     if not output:
@@ -276,6 +287,7 @@ def build_plugin_catalog(
     volatility_command: Sequence[str] | str | None = None,
 ) -> Dict[str, PluginInfo]:
     catalog = get_curated_plugin_catalog()
+
     try:
         discovered_plugins = discover_volatility_plugins(volatility_command)
     except RuntimeError:
@@ -297,6 +309,12 @@ def build_plugin_catalog(
         catalog[plugin_name] = discovered
 
     return catalog
+
+
+def build_user_plugin_catalog(
+    volatility_command: Sequence[str] | str | None = None,
+) -> Dict[str, PluginInfo]:
+    return filter_user_plugin_catalog(build_plugin_catalog(volatility_command))
 
 
 def validate_plugin_names(
@@ -330,8 +348,6 @@ def validate_plugin_names(
         validated.append(resolved_name)
 
     if unknown:
-        raise ValueError(
-            "Unknown plugins: " + ", ".join(sorted(set(unknown)))
-        )
+        raise ValueError("Unknown plugins: " + ", ".join(sorted(set(unknown))))
 
     return validated

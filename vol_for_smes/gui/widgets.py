@@ -115,8 +115,8 @@ class PluginSelectionDialog(QDialog):
         layout = QVBoxLayout(self)
         note = QLabel(
             "Select the plugins to include in a custom preset. "
-            "The current investigation workflow supports Windows memory images, "
-            "so non-Windows plugins may not be appropriate for every case."
+            "Only Windows plugins are shown because the current investigation workflow "
+            "supports Windows memory images."
         )
         note.setWordWrap(True)
         layout.addWidget(note)

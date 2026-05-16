@@ -3,8 +3,20 @@ Generic helper functions used throughout the application.
 """
 
 import json
+import os
 import subprocess
 from typing import List, Any
+
+
+def get_subprocess_run_kwargs() -> dict[str, Any]:
+    """
+    Return subprocess keyword arguments that avoid flashing console windows on Windows.
+    """
+    if os.name != "nt":
+        return {}
+
+    create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return {"creationflags": create_no_window} if create_no_window else {}
 
 
 def can_invoke_command(command: List[str]) -> bool:
@@ -25,6 +37,7 @@ def can_invoke_command(command: List[str]) -> bool:
             text=True,
             timeout=8,
             check=False,
+            **get_subprocess_run_kwargs(),
         )
     except (FileNotFoundError, PermissionError, OSError, subprocess.TimeoutExpired):
         return False
@@ -133,7 +146,7 @@ def extract_rows(volatility_json: Any) -> List[Any]:
         # For Volatility 3 JSON output, it's a list of row objects
         return volatility_json
     elif "rows" in volatility_json:
-        # Legacy format
+        # Some plugins still return tabular row arrays under "rows"
         return volatility_json["rows"]
     else:
         return []

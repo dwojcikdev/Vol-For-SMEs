@@ -18,7 +18,7 @@ def parse_processes(volatility_json):
                 "threads": row.get("Threads", row.get("threads"))
             }
         else:
-            # Legacy format: list/tuple
+            # Some plugin results still arrive as positional row values
             process = {
                 "pid": row[1] if len(row) > 1 else None,
                 "ppid": row[2] if len(row) > 2 else None,

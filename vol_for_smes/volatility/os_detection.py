@@ -5,7 +5,7 @@ from .command_resolver import (
     parse_json_output,
 )
 
-from ..utils.helpers import parse_info_rows
+from ..utils.helpers import get_subprocess_run_kwargs, parse_info_rows
 
 
 def _candidate_commands(volatility_path):
@@ -37,7 +37,8 @@ def _detect_with_windows_info(memory_path, volatility_command):
         command,
         capture_output=True,
         text=True,
-        timeout=180
+        timeout=180,
+        **get_subprocess_run_kwargs(),
     )
     if result.returncode != 0:
         error_text = (result.stderr or result.stdout or "").strip()

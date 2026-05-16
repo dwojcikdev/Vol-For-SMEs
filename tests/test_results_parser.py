@@ -7,7 +7,7 @@ def test_extract_rows_returns_list_input_unchanged():
     assert results_parser.extract_rows(rows) is rows
 
 
-def test_extract_rows_returns_legacy_rows():
+def test_extract_rows_returns_tabular_rows():
     assert results_parser.extract_rows({"rows": [[0, 4]]}) == [[0, 4]]
 
 
@@ -31,13 +31,13 @@ def test_parse_processes_parses_lowercase_and_name_keys():
     assert result == [{"pid": 123, "ppid": 4, "name": "cmd.exe", "threads": 2}]
 
 
-def test_parse_processes_parses_legacy_list_rows():
+def test_parse_processes_parses_tabular_list_rows():
     result = results_parser.parse_processes({"rows": [["offset", 10, 4, "explorer.exe", 20]]})
 
     assert result == [{"pid": 10, "ppid": 4, "name": "explorer.exe", "threads": 20}]
 
 
-def test_parse_processes_handles_short_legacy_rows():
+def test_parse_processes_handles_short_tabular_rows():
     result = results_parser.parse_processes({"rows": [["offset", 10]]})
 
     assert result == [{"pid": 10, "ppid": None, "name": None, "threads": None}]

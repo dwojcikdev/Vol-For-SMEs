@@ -1,7 +1,7 @@
 """
 Shared scoring and MITRE ATT&CK helpers.
 
-The process analysis pipeline now uses a score-led model. The legacy
+The process analysis pipeline now uses a score-led model. The
 ``calculate_risk_score`` helper is kept for compatibility with the existing
 plugin and network analyses.
 """
