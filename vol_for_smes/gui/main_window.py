@@ -9,7 +9,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Mapping
 
-from PyQt6.QtCore import QObject, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import QTextCursor
 from PyQt6.QtWidgets import (
     QApplication,
@@ -41,15 +41,24 @@ from ..config import (
     save_ui_theme_name,
 )
 from ..investigation import (
+    MEMORY_IMAGE_SELECTION_GUIDANCE,
+    REPORT_EXPORT_GUIDANCE,
     build_report_case_metadata,
     default_report_path,
     run_investigation,
 )
 from ..reporting import build_analysis_report, export_analysis_to_pdf
 from ..reporting.report_builder import ANALYST_REVIEW_NOTICE
-from ..volatility import PluginInfo, build_plugin_catalog
+from ..utils.file_utils import build_memory_image_metadata
+from ..volatility import (
+    PluginInfo,
+    build_user_plugin_catalog,
+    filter_user_plugin_catalog,
+    get_user_curated_plugin_catalog,
+)
 from ..volatility import DEFAULT_PLUGIN_GROUP_NAME
 from .themes import THEMES, apply_theme, get_theme_definition, theme_choices
+from .timeline_graph_view import TimelineGraphView
 from .timeline_view import TimelineView
 from .widgets import PluginSelectionDialog, PluginTableWidget
 
@@ -68,7 +77,7 @@ class _SignalStream:
 
 class InvestigationWorker(QObject):
     log_message = pyqtSignal(str)
-    completed = pyqtSignal(object, object, object, str)
+    completed = pyqtSignal(object, object, object, str, object)
     failed = pyqtSignal(str)
 
     def __init__(
@@ -86,17 +95,42 @@ class InvestigationWorker(QObject):
         stream = _SignalStream(self.log_message.emit)
         try:
             with redirect_stdout(stream), redirect_stderr(stream):
+                memory_image_metadata = build_memory_image_metadata(self.memory_image)
                 results, preset = run_investigation(
                     self.memory_image,
                     self.preset_name,
                     settings_path=self.settings_path,
+                    memory_image_metadata=memory_image_metadata,
                 )
                 if not results:
-                    self.completed.emit(None, None, preset, self.memory_image)
+                    self.completed.emit(
+                        None,
+                        None,
+                        preset,
+                        self.memory_image,
+                        memory_image_metadata,
+                    )
                     return
 
                 analysis = analyse_artefacts(results)
-                self.completed.emit(results, analysis, preset, self.memory_image)
+                self.completed.emit(
+                    results,
+                    analysis,
+                    preset,
+                    self.memory_image,
+                    memory_image_metadata,
+                )
+        except Exception:
+            self.failed.emit(traceback.format_exc())
+
+
+class PluginCatalogWorker(QObject):
+    completed = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def run(self) -> None:
+        try:
+            self.completed.emit(build_user_plugin_catalog())
         except Exception:
             self.failed.emit(traceback.format_exc())
 
@@ -110,14 +144,23 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.settings_path = settings_path
-        self.plugin_catalog = dict(plugin_catalog or build_plugin_catalog())
+        self._provided_plugin_catalog = plugin_catalog
+        self.plugin_catalog = (
+            filter_user_plugin_catalog(plugin_catalog)
+            if plugin_catalog is not None
+            else get_user_curated_plugin_catalog()
+        )
+        self.catalog_refresh_in_progress = plugin_catalog is None
         self.presets: dict[str, PluginPreset] = {}
         self.current_results = None
         self.current_analysis = None
         self.current_preset: PluginPreset | None = None
         self.current_memory_image = ""
+        self.current_memory_image_metadata = None
         self.worker_thread: QThread | None = None
         self.worker: InvestigationWorker | None = None
+        self.catalog_thread: QThread | None = None
+        self.catalog_worker: PluginCatalogWorker | None = None
         self.active_theme_name = self._load_initial_theme_name()
 
         self.setWindowTitle("Vol For SMEs")
@@ -127,6 +170,8 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self.refresh_presets()
         self._update_catalog_status()
+        if self.catalog_refresh_in_progress:
+            QTimer.singleShot(0, self._start_plugin_catalog_refresh)
 
     def _load_initial_theme_name(self) -> str:
         theme_name = get_ui_theme_name(self.settings_path)
@@ -192,6 +237,10 @@ class MainWindow(QMainWindow):
         browse_button.clicked.connect(self._browse_memory_image)
         memory_row.addWidget(browse_button)
         memory_layout.addLayout(memory_row)
+        self.memory_safety_label = QLabel(MEMORY_IMAGE_SELECTION_GUIDANCE)
+        self.memory_safety_label.setObjectName("warningBanner")
+        self.memory_safety_label.setWordWrap(True)
+        memory_layout.addWidget(self.memory_safety_label)
         investigation_layout.addWidget(memory_box)
 
         preset_box = QGroupBox("Plugin Preset", investigation_tab)
@@ -232,6 +281,10 @@ class MainWindow(QMainWindow):
         self.export_button.clicked.connect(self._export_pdf_report)
         action_row.addWidget(self.export_button)
         investigation_layout.addLayout(action_row)
+        self.report_safety_label = QLabel(REPORT_EXPORT_GUIDANCE)
+        self.report_safety_label.setObjectName("catalogStatus")
+        self.report_safety_label.setWordWrap(True)
+        investigation_layout.addWidget(self.report_safety_label)
 
         settings_tab = QWidget(self)
         settings_layout = QVBoxLayout(settings_tab)
@@ -283,12 +336,14 @@ class MainWindow(QMainWindow):
         self.findings_view = QPlainTextEdit()
         self.findings_view.setReadOnly(True)
         self.timeline_view = TimelineView(self)
+        self.timeline_graph_view = TimelineGraphView(self)
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
 
         self.tab_widget.addTab(self.summary_view, "Summary")
         self.tab_widget.addTab(self.findings_view, "Findings")
         self.tab_widget.addTab(self.timeline_view, "Timeline")
+        self.tab_widget.addTab(self.timeline_graph_view, "Timeline Graph")
         self.tab_widget.addTab(self.log_view, "Execution Log")
         results_layout.addWidget(self.tab_widget)
 
@@ -305,11 +360,48 @@ class MainWindow(QMainWindow):
         context_count = sum(
             1 for info in self.plugin_catalog.values() if info.support_level == "context"
         )
+        if self.catalog_refresh_in_progress:
+            self.catalog_status_label.setText(
+                f"Loaded {plugin_count} built-in Windows plugins. "
+                "Checking the bundled Volatility runtime for any additional Windows plugins..."
+            )
+            return
+
         self.catalog_status_label.setText(
-            f"Discovered {plugin_count} plugins. "
+            f"Discovered {plugin_count} Windows plugins available for investigations. "
             f"{scored_count} are scored automatically, {context_count} contribute contextual data, "
             "and the remainder are runnable-only."
         )
+
+    def _start_plugin_catalog_refresh(self) -> None:
+        if self.catalog_thread is not None:
+            return
+
+        self.catalog_thread = QThread(self)
+        self.catalog_worker = PluginCatalogWorker()
+        self.catalog_worker.moveToThread(self.catalog_thread)
+        self.catalog_thread.started.connect(self.catalog_worker.run)
+        self.catalog_worker.completed.connect(self._plugin_catalog_refresh_completed)
+        self.catalog_worker.failed.connect(self._plugin_catalog_refresh_failed)
+        self.catalog_thread.start()
+
+    def _finish_plugin_catalog_refresh(self) -> None:
+        if self.catalog_thread is not None:
+            self.catalog_thread.quit()
+            self.catalog_thread.wait()
+        self.catalog_thread = None
+        self.catalog_worker = None
+        self.catalog_refresh_in_progress = False
+
+    def _plugin_catalog_refresh_completed(self, plugin_catalog) -> None:
+        self._finish_plugin_catalog_refresh()
+        self.plugin_catalog = dict(plugin_catalog)
+        self._update_selected_preset()
+        self._update_catalog_status()
+
+    def _plugin_catalog_refresh_failed(self, _error_text: str) -> None:
+        self._finish_plugin_catalog_refresh()
+        self._update_catalog_status()
 
     def _sync_theme_combo(self) -> None:
         theme_index = self.theme_combo.findData(self.active_theme_name)
@@ -376,7 +468,7 @@ class MainWindow(QMainWindow):
             self,
             "Select memory image",
             str(Path.cwd()),
-            "Memory images (*.raw *.mem *.dmp);;All files (*.*)",
+            "Memory images (*.raw *.mem *.dmp *.vmem);;All files (*.*)",
         )
         if selected:
             self.memory_image_edit.setText(selected)
@@ -419,7 +511,10 @@ class MainWindow(QMainWindow):
         if response != QMessageBox.StandardButton.Yes:
             return
 
-        delete_custom_plugin_preset(preset.name, settings_path=self.settings_path)
+        delete_custom_plugin_preset(
+            preset.name,
+            settings_path=self.settings_path,
+        )
         self.refresh_presets()
         self.statusBar().showMessage(
             f"Deleted custom preset '{preset.name}'.",
@@ -431,7 +526,7 @@ class MainWindow(QMainWindow):
         self.save_preset_button.setEnabled(enabled)
         self.delete_preset_button.setEnabled(enabled and not self._current_preset().built_in)
         self.preset_combo.setEnabled(enabled)
-        self.theme_combo.setEnabled(enabled)
+        self.theme_combo.setEnabled(True)
 
     def _start_investigation(self) -> None:
         memory_image = self.memory_image_edit.text().strip()
@@ -451,6 +546,7 @@ class MainWindow(QMainWindow):
         self.summary_view.clear()
         self.findings_view.clear()
         self.timeline_view.set_timeline([])
+        self.timeline_graph_view.set_timeline([])
         self.export_button.setEnabled(False)
         self._set_controls_enabled(False)
         self.statusBar().showMessage(
@@ -489,12 +585,14 @@ class MainWindow(QMainWindow):
         analysis,
         preset,
         memory_image: str,
+        memory_image_metadata,
     ) -> None:
         self._cleanup_worker()
         self.current_results = results
         self.current_analysis = analysis
         self.current_preset = preset
         self.current_memory_image = memory_image
+        self.current_memory_image_metadata = memory_image_metadata
 
         if not results or not analysis:
             self.summary_view.setPlainText(
@@ -502,13 +600,18 @@ class MainWindow(QMainWindow):
             )
             self.findings_view.setPlainText("")
             self.timeline_view.set_timeline([])
+            self.timeline_graph_view.set_timeline([])
             self.export_button.setEnabled(False)
             self.statusBar().showMessage("Investigation finished without results.", 5000)
             return
 
         report = build_analysis_report(
             analysis,
-            case_metadata=build_report_case_metadata(memory_image, preset),
+            case_metadata=build_report_case_metadata(
+                memory_image,
+                preset,
+                memory_image_metadata=memory_image_metadata,
+            ),
         )
         self._populate_report_views(report)
         self.export_button.setEnabled(True)
@@ -524,6 +627,7 @@ class MainWindow(QMainWindow):
         )
         self.findings_view.setPlainText("")
         self.timeline_view.set_timeline([])
+        self.timeline_graph_view.set_timeline([])
         self.export_button.setEnabled(False)
         self._append_log(error_text)
         QMessageBox.critical(
@@ -586,7 +690,9 @@ class MainWindow(QMainWindow):
             ]
 
         self.findings_view.setPlainText("\n".join(finding_lines))
-        self.timeline_view.set_timeline(report.get("timeline", []))
+        timeline = report.get("timeline", [])
+        self.timeline_view.set_timeline(timeline)
+        self.timeline_graph_view.set_timeline(timeline)
 
     def _export_pdf_report(self) -> None:
         if not self.current_analysis or not self.current_preset:
@@ -614,6 +720,7 @@ class MainWindow(QMainWindow):
                 case_metadata=build_report_case_metadata(
                     self.current_memory_image,
                     self.current_preset,
+                    memory_image_metadata=self.current_memory_image_metadata,
                 ),
             )
         except OSError as exc:
@@ -630,3 +737,11 @@ class MainWindow(QMainWindow):
             "PDF exported",
             f"Report exported to:\n{written_path}",
         )
+
+    def closeEvent(self, event) -> None:
+        if self.catalog_thread is not None:
+            self.catalog_thread.quit()
+            self.catalog_thread.wait()
+            self.catalog_thread = None
+            self.catalog_worker = None
+        super().closeEvent(event)

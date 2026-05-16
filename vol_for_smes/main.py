@@ -2,11 +2,14 @@ from pathlib import Path
 
 from .analysis import analyse_artefacts
 from .investigation import (
+    MEMORY_IMAGE_SELECTION_GUIDANCE,
+    REPORT_EXPORT_GUIDANCE,
     build_report_case_metadata,
     default_report_path,
     run_investigation,
 )
 from .reporting import export_analysis_to_pdf
+from .utils.file_utils import build_memory_image_metadata
 from .volatility import DEFAULT_PLUGIN_GROUP_NAME, parse_processes
 
 
@@ -140,12 +143,19 @@ _default_report_path = default_report_path
 _build_report_case_metadata = build_report_case_metadata
 
 
-def prompt_and_export_report(analysis, memory_image, preset=None):
+def prompt_and_export_report(
+    analysis,
+    memory_image,
+    preset=None,
+    memory_image_metadata=None,
+):
     response = input("Export analysis report to PDF? [Y/n]: ").strip().lower()
     if response not in {"", "y", "yes"}:
         print("PDF export skipped.")
         return None
 
+    print()
+    print(REPORT_EXPORT_GUIDANCE)
     default_output_path = default_report_path(memory_image)
     custom_output = input(
         f"Enter PDF output path [{default_output_path}]: "
@@ -156,7 +166,11 @@ def prompt_and_export_report(analysis, memory_image, preset=None):
         written_path = export_analysis_to_pdf(
             analysis,
             output_path,
-            case_metadata=build_report_case_metadata(memory_image, preset),
+            case_metadata=build_report_case_metadata(
+                memory_image,
+                preset,
+                memory_image_metadata=memory_image_metadata,
+            ),
         )
     except OSError as exc:
         print(f"Could not export PDF report: {exc}")
@@ -169,11 +183,20 @@ def prompt_and_export_report(analysis, memory_image, preset=None):
 def main():
 
     print("Vol For SMEs - Memory Forensics Tool\n")
+    print(MEMORY_IMAGE_SELECTION_GUIDANCE)
+    print("The app hashes the selected memory image before analysis and keeps the original file read-only.\n")
 
     memory_image = input("Enter memory image path: ").strip()
+    try:
+        memory_image_metadata = build_memory_image_metadata(memory_image)
+    except OSError as exc:
+        print(f"\nCould not prepare the memory image for analysis: {exc}")
+        return
+
     results, selected_preset = run_investigation(
         memory_image,
         DEFAULT_PLUGIN_GROUP_NAME,
+        memory_image_metadata=memory_image_metadata,
     )
 
     if not results:
@@ -183,7 +206,12 @@ def main():
 
     display_analysis_results(analysis)
     display_process_results(results)
-    prompt_and_export_report(analysis, memory_image, selected_preset)
+    prompt_and_export_report(
+        analysis,
+        memory_image,
+        selected_preset,
+        memory_image_metadata=memory_image_metadata,
+    )
 
 
 if __name__ == "__main__":

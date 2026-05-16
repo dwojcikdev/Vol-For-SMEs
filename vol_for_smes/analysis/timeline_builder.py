@@ -22,6 +22,17 @@ TIMESTAMP_FIELD_HINTS = (
     "lastaccess",
 )
 
+PID_FIELD_HINTS = ("pid", "PID", "Pid", "ProcessId", "OwnerPid")
+PPID_FIELD_HINTS = (
+    "ppid",
+    "PPID",
+    "Ppid",
+    "ParentPid",
+    "InheritedFromUniqueProcessId",
+    "InheritedFromPid",
+    "Parent PID",
+)
+
 
 def _normalise_rows(plugin_result: Any) -> List[Dict[str, Any]]:
     rows = extract_rows(plugin_result)
@@ -36,6 +47,26 @@ def _normalise_rows(plugin_result: Any) -> List[Dict[str, Any]]:
             )
 
     return normalised
+
+
+def _safe_lower(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_first(row: Dict[str, Any], *keys: str) -> Any:
+    lowered = {_safe_lower(key): value for key, value in row.items()}
+    for key in keys:
+        lowered_key = _safe_lower(key)
+        if lowered_key in lowered:
+            return lowered[lowered_key]
+    return None
 
 
 def _parse_timestamp(value: Any) -> Optional[datetime]:
@@ -76,6 +107,7 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
 def _row_identity(row: Dict[str, Any]) -> str:
     for key in (
         "ImageFileName",
+        "name",
         "Name",
         "Process",
         "ProcessName",
@@ -85,8 +117,9 @@ def _row_identity(row: Dict[str, Any]) -> str:
     ):
         if row.get(key):
             return str(row[key])
-    if row.get("PID") not in (None, ""):
-        return f"PID {row['PID']}"
+    pid = _find_first(row, *PID_FIELD_HINTS)
+    if pid not in (None, ""):
+        return f"PID {pid}"
     return "artefact"
 
 
@@ -118,6 +151,9 @@ def build_timeline(results: Dict[str, Any]) -> List[Dict[str, Any]]:
                         "plugin": plugin_name,
                         "field": str(field_name),
                         "description": _event_description(plugin_name, row, str(field_name)),
+                        "entity_label": _row_identity(row),
+                        "pid": _safe_int(_find_first(row, *PID_FIELD_HINTS)),
+                        "ppid": _safe_int(_find_first(row, *PPID_FIELD_HINTS)),
                         "raw_value": value,
                         "row": row,
                     }

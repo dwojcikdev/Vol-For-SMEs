@@ -53,6 +53,25 @@ def test_build_timeline_extracts_and_sorts_timestamp_events():
     ]
 
 
+def test_build_timeline_preserves_normalised_process_identifiers():
+    timeline = build_timeline(
+        {
+            "windows.pslist": [
+                {
+                    "pid": "900",
+                    "ppid": "400",
+                    "name": "powershell.exe",
+                    "CreateTime": "2024-01-03 09:00:00 UTC",
+                }
+            ]
+        }
+    )
+
+    assert timeline[0]["entity_label"] == "powershell.exe"
+    assert timeline[0]["pid"] == 900
+    assert timeline[0]["ppid"] == 400
+
+
 def test_analyse_artefacts_returns_findings_and_timeline():
     analysis = analyse_artefacts(
         {
