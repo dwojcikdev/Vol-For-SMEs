@@ -6,8 +6,9 @@ import hashlib
 import os
 import shlex
 import sys
+import tempfile
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 
 APP_NAME = "Vol For SMEs"
 
@@ -47,13 +48,50 @@ def get_reports_dir(app_name: str = APP_NAME) -> Path:
     return get_local_app_data_dir(app_name) / "Reports"
 
 
-def build_memory_image_metadata(target_path: Union[str, Path]) -> dict:
+def get_logs_dir(app_name: str = APP_NAME) -> Path:
+    return get_local_app_data_dir(app_name) / "Logs"
+
+
+def _ensure_writable_directory(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def get_volatility_cache_dir(app_name: str = APP_NAME) -> Path:
+    preferred = get_local_app_data_dir(app_name) / "VolatilityCache"
+    candidates = [preferred]
+
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(tempfile.gettempdir()) / app_name / "VolatilityCache")
+    else:
+        candidates.append(get_project_root() / ".volatility-cache")
+        candidates.append(Path(tempfile.gettempdir()) / app_name / "VolatilityCache")
+
+    for candidate in candidates:
+        if _ensure_writable_directory(candidate):
+            return candidate
+    return preferred
+
+
+def build_memory_image_metadata(
+    target_path: Union[str, Path],
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> dict:
     path = Path(target_path).expanduser()
     resolved_path = path.resolve(strict=True)
     sha256 = hashlib.sha256()
 
     with resolved_path.open("rb") as handle:
         while True:
+            if should_cancel is not None and should_cancel():
+                raise InterruptedError("Operation cancelled.")
             chunk = handle.read(1024 * 1024)
             if not chunk:
                 break

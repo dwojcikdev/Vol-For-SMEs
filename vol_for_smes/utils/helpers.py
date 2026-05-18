@@ -5,6 +5,7 @@ Generic helper functions used throughout the application.
 import json
 import os
 import subprocess
+import time
 from typing import List, Any
 
 
@@ -17,6 +18,92 @@ def get_subprocess_run_kwargs() -> dict[str, Any]:
 
     create_no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     return {"creationflags": create_no_window} if create_no_window else {}
+
+
+def _terminate_process(
+    process: subprocess.Popen,
+    *,
+    force: bool = False,
+    wait_timeout: float = 1.0,
+) -> None:
+    if process.poll() is not None:
+        return
+
+    if force:
+        process.kill()
+    else:
+        process.terminate()
+    try:
+        process.wait(timeout=wait_timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=wait_timeout)
+
+
+def run_subprocess(
+    command: List[str],
+    *,
+    timeout: float | None = None,
+    cancel_event: Any = None,
+    on_process_start: Any = None,
+    on_process_end: Any = None,
+) -> subprocess.CompletedProcess[str]:
+    if cancel_event is None:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            **get_subprocess_run_kwargs(),
+        )
+
+    started_at = time.monotonic()
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **get_subprocess_run_kwargs(),
+    )
+    if on_process_start is not None:
+        on_process_start(process)
+
+    try:
+        while True:
+            if cancel_event.is_set():
+                _terminate_process(process, wait_timeout=1.0)
+                raise InterruptedError("Operation cancelled.")
+
+            wait_timeout = 0.2
+            if timeout is not None:
+                remaining = timeout - (time.monotonic() - started_at)
+                if remaining <= 0:
+                    _terminate_process(process)
+                    stdout, stderr = process.communicate()
+                    raise subprocess.TimeoutExpired(
+                        command,
+                        timeout,
+                        output=stdout,
+                        stderr=stderr,
+                    )
+                wait_timeout = min(wait_timeout, remaining)
+
+            try:
+                stdout, stderr = process.communicate(timeout=wait_timeout)
+                return subprocess.CompletedProcess(
+                    command,
+                    process.returncode,
+                    stdout,
+                    stderr,
+                )
+            except subprocess.TimeoutExpired:
+                continue
+    finally:
+        if cancel_event.is_set():
+            _terminate_process(process, force=True, wait_timeout=0.2)
+        if on_process_end is not None:
+            on_process_end(process)
 
 
 def can_invoke_command(command: List[str]) -> bool:

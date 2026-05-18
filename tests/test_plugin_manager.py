@@ -99,6 +99,17 @@ def test_filter_user_plugin_catalog_keeps_windows_plugins_only():
     }
 
 
+def test_default_investigation_excludes_file_activity_plugins():
+    presets = plugin_manager.get_builtin_plugin_groups()
+
+    assert "windows.filescan" not in presets["default_investigation"]
+    assert "windows.shimcache" not in presets["default_investigation"]
+    assert "windows.filescan" in presets["file_activity"]
+    assert "windows.shimcache" in presets["file_activity"]
+    assert "windows.filescan" in presets["extended_investigation"]
+    assert "windows.shimcache" in presets["extended_investigation"]
+
+
 def test_validate_plugin_names_accepts_aliases_and_deduplicates():
     catalog = {
         "windows.pslist": plugin_manager.PluginInfo(
@@ -128,4 +139,3 @@ def test_validate_plugin_names_rejects_unknown_plugins():
             ["windows.unknown"],
             plugin_catalog=plugin_manager.get_curated_plugin_catalog(),
         )
-

@@ -5,7 +5,12 @@ from .command_resolver import (
     parse_json_output,
 )
 
-from ..utils.helpers import get_subprocess_run_kwargs, parse_info_rows
+from ..utils.helpers import parse_info_rows, run_subprocess
+from ..utils.file_utils import get_volatility_cache_dir
+
+
+def _default_volatility_args() -> list[str]:
+    return ["--cache-path", str(get_volatility_cache_dir())]
 
 
 def _candidate_commands(volatility_path):
@@ -27,18 +32,16 @@ def _candidate_commands(volatility_path):
     return commands
 
 
-def _detect_with_windows_info(memory_path, volatility_command):
+def _detect_with_windows_info(memory_path, volatility_command, cancel_event=None):
     used_plugin = "windows.info"
     command = build_volatility_command(
         volatility_command,
-        ["--renderer", "json", "-f", memory_path, used_plugin],
+        _default_volatility_args() + ["--renderer", "json", "-f", memory_path, used_plugin],
     )
-    result = subprocess.run(
+    result = run_subprocess(
         command,
-        capture_output=True,
-        text=True,
         timeout=180,
-        **get_subprocess_run_kwargs(),
+        cancel_event=cancel_event,
     )
     if result.returncode != 0:
         error_text = (result.stderr or result.stdout or "").strip()
@@ -53,7 +56,7 @@ def _detect_with_windows_info(memory_path, volatility_command):
         "os": "Windows",
         "detected_with": used_plugin,
         "volatility_command": list(volatility_command),
-        "volatility_args": [],
+        "volatility_args": _default_volatility_args(),
     }
 
     for key, value in parsed_values.items():
@@ -71,7 +74,7 @@ def _detect_with_windows_info(memory_path, volatility_command):
     return os_info
 
 
-def detect_os(memory_path, volatility_path="vol"):
+def detect_os(memory_path, volatility_path="vol", cancel_event=None):
     """
     Attempts to detect the Windows version of a memory image
     using the Volatility windows.info plugin.
@@ -85,8 +88,16 @@ def detect_os(memory_path, volatility_path="vol"):
 
     errors = []
     for volatility_command in commands:
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("Operation cancelled.")
         try:
-            return _detect_with_windows_info(memory_path, volatility_command)
+            return _detect_with_windows_info(
+                memory_path,
+                volatility_command,
+                cancel_event=cancel_event,
+            )
+        except InterruptedError:
+            raise
         except Exception as exc:
             errors.append(f"[{' '.join(volatility_command)}] {str(exc)}")
             continue

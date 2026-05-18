@@ -56,11 +56,21 @@ def test_candidate_commands_uses_resolve_when_no_command_found(mock_discover, mo
     assert os_detection._candidate_commands("vol") == [["resolved"]]
 
 
+@patch("vol_for_smes.volatility.os_detection._default_volatility_args", return_value=["--cache-path", "cache"])
 @patch("vol_for_smes.volatility.os_detection.parse_json_output")
-@patch("vol_for_smes.volatility.os_detection.subprocess.run")
+@patch("vol_for_smes.volatility.os_detection.run_subprocess")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command")
-def test_detect_with_windows_info_returns_windows_details(mock_build, mock_run, mock_parse):
-    mock_build.return_value = ["vol", "--renderer", "json", "-f", "memory.raw", "windows.info"]
+def test_detect_with_windows_info_returns_windows_details(mock_build, mock_run, mock_parse, _mock_args):
+    mock_build.return_value = [
+        "vol",
+        "--cache-path",
+        "cache",
+        "--renderer",
+        "json",
+        "-f",
+        "memory.raw",
+        "windows.info",
+    ]
     mock_run.return_value = SimpleNamespace(returncode=0, stdout="[]", stderr="")
     mock_parse.return_value = [
         {"Variable": "Kernel Base", "Value": "0xf8000000"},
@@ -76,16 +86,18 @@ def test_detect_with_windows_info_returns_windows_details(mock_build, mock_run, 
     assert result["detected_with"] == "windows.info"
     assert result["architecture"] == "x64"
     assert result["major_version"] == 10
+    assert result["volatility_args"] == ["--cache-path", "cache"]
     mock_build.assert_called_once_with(
         ["vol"],
-        ["--renderer", "json", "-f", "memory.raw", "windows.info"],
+        ["--cache-path", "cache", "--renderer", "json", "-f", "memory.raw", "windows.info"],
     )
 
 
 @patch("vol_for_smes.volatility.os_detection.parse_json_output", return_value=[])
-@patch("vol_for_smes.volatility.os_detection.subprocess.run")
+@patch("vol_for_smes.volatility.os_detection._default_volatility_args", return_value=["--cache-path", "cache"])
+@patch("vol_for_smes.volatility.os_detection.run_subprocess")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command", return_value=["vol"])
-def test_detect_with_windows_info_returns_unknown_when_no_rows(_, mock_run, __):
+def test_detect_with_windows_info_returns_unknown_when_no_rows(_, mock_run, __, ___):
     mock_run.return_value = SimpleNamespace(returncode=0, stdout="[]", stderr="")
 
     assert os_detection._detect_with_windows_info("memory.raw", ["vol"]) == {
@@ -94,9 +106,10 @@ def test_detect_with_windows_info_returns_unknown_when_no_rows(_, mock_run, __):
     }
 
 
-@patch("vol_for_smes.volatility.os_detection.subprocess.run")
+@patch("vol_for_smes.volatility.os_detection._default_volatility_args", return_value=["--cache-path", "cache"])
+@patch("vol_for_smes.volatility.os_detection.run_subprocess")
 @patch("vol_for_smes.volatility.os_detection.build_volatility_command", return_value=["vol"])
-def test_detect_with_windows_info_raises_on_plugin_failure(_, mock_run):
+def test_detect_with_windows_info_raises_on_plugin_failure(_, mock_run, __):
     mock_run.return_value = SimpleNamespace(returncode=1, stdout="", stderr="failed")
 
     with pytest.raises(RuntimeError, match="failed"):
@@ -117,7 +130,11 @@ def test_detect_os_uses_windows_info_detection(mock_candidates, mock_detect_wind
     mock_detect_windows_info.return_value = {"os": "Windows"}
 
     assert os_detection.detect_os("memory.raw") == {"os": "Windows"}
-    mock_detect_windows_info.assert_called_once_with("memory.raw", ["vol"])
+    mock_detect_windows_info.assert_called_once_with(
+        "memory.raw",
+        ["vol"],
+        cancel_event=None,
+    )
 
 
 @patch("vol_for_smes.volatility.os_detection._detect_with_windows_info")

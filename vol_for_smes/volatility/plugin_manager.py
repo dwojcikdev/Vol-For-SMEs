@@ -70,6 +70,18 @@ PLUGIN_GROUPS = {
         "windows.dlllist",
         "windows.handles",
     ],
+    "extended_investigation": [
+        "windows.pslist",
+        "windows.psscan",
+        "windows.pstree",
+        "windows.cmdline",
+        "windows.netscan",
+        "windows.malfind",
+        "windows.dlllist",
+        "windows.handles",
+        "windows.filescan",
+        "windows.shimcache",
+    ],
 }
 
 DEFAULT_PLUGIN_GROUP_NAME = "default_investigation"
