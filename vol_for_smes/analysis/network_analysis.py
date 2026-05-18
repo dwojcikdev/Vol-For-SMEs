@@ -7,7 +7,12 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from ..utils.helpers import extract_rows
-from .scoring import build_mitre_tags, calculate_risk_score, infer_mitre_techniques
+from .scoring import (
+    build_mitre_tags,
+    calculate_risk_score,
+    infer_mitre_techniques,
+    is_external_ip,
+)
 
 SUSPICIOUS_NETWORK_OWNERS = {
     "powershell.exe",
@@ -18,9 +23,6 @@ SUSPICIOUS_NETWORK_OWNERS = {
     "rundll32.exe",
     "regsvr32.exe",
 }
-
-SAFE_LOCAL_ADDRESSES = {"0.0.0.0", "::", "*", "127.0.0.1", "::1"}
-
 
 def _safe_lower(value: Any) -> str:
     return str(value or "").strip().lower()
@@ -83,7 +85,7 @@ def analyse_network_activity(results: Dict[str, Any]) -> Dict[str, Any]:
         connection_severity = "none"
         reasons = []
 
-        if foreign_addr and _safe_lower(foreign_addr) not in SAFE_LOCAL_ADDRESSES:
+        if is_external_ip(foreign_addr):
             connection_severity = _merge_severity(connection_severity, "low")
             reasons.append("remote network endpoint present")
             mitre_techniques.add("T1071")
