@@ -26,6 +26,9 @@ vol-for-smes-cli = "vol_for_smes.main:main"
 include = ["vol_for_smes*"]
 exclude = ["tests*"]
 
+[tool.setuptools.package-data]
+"vol_for_smes.analysis" = ["*.csv"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
