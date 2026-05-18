@@ -135,18 +135,49 @@ class ThemeDefinition:
                 padding: 7px 12px;
                 font-weight: 600;
             }}
+            QPushButton#abortButton {{
+                background-color: {self.surface};
+                color: {self.warning_text};
+                border: 1px solid {self.warning_border};
+            }}
             QPushButton:hover {{
                 background-color: {self.accent_hover};
                 border-color: {self.accent_hover};
+            }}
+            QPushButton#abortButton:hover {{
+                background-color: {self.warning_background};
+                border-color: {self.warning_border};
             }}
             QPushButton:pressed {{
                 background-color: {self.accent_pressed};
                 border-color: {self.accent_pressed};
             }}
+            QPushButton#abortButton:pressed {{
+                background-color: {self.warning_background};
+                border-color: {self.warning_text};
+            }}
             QPushButton:disabled {{
                 background-color: {self.surface_alt};
                 color: {self.muted_text};
                 border-color: {self.border};
+            }}
+            QPushButton#abortButton:disabled {{
+                background-color: {self.surface_alt};
+                color: {self.muted_text};
+                border-color: {self.border};
+            }}
+            QProgressBar {{
+                background-color: {self.input_background};
+                color: {self.text};
+                border: 1px solid {self.border};
+                border-radius: 8px;
+                padding: 1px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background-color: {self.accent};
+                border-radius: 6px;
+                margin: 1px;
             }}
             QTabWidget::pane {{
                 border: 1px solid {self.border};

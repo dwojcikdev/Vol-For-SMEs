@@ -7,6 +7,7 @@ from __future__ import annotations
 import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from threading import Event
 from typing import Mapping
 
 from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
@@ -23,6 +24,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QPlainTextEdit,
+    QProgressBar,
     QSplitter,
     QStatusBar,
     QTabWidget,
@@ -57,7 +59,9 @@ from ..volatility import (
     get_user_curated_plugin_catalog,
 )
 from ..volatility import DEFAULT_PLUGIN_GROUP_NAME
+from ..volatility.volatility_runner import VolatilityRunCancelled
 from .themes import THEMES, apply_theme, get_theme_definition, theme_choices
+from .raw_plugin_output_view import RawPluginOutputView
 from .timeline_graph_view import TimelineGraphView
 from .timeline_view import TimelineView
 from .widgets import PluginSelectionDialog, PluginTableWidget
@@ -77,7 +81,9 @@ class _SignalStream:
 
 class InvestigationWorker(QObject):
     log_message = pyqtSignal(str)
-    completed = pyqtSignal(object, object, object, str, object)
+    progress = pyqtSignal(object)
+    completed = pyqtSignal(object, object, object, str, object, object)
+    aborted = pyqtSignal()
     failed = pyqtSignal(str)
 
     def __init__(
@@ -90,18 +96,51 @@ class InvestigationWorker(QObject):
         self.memory_image = memory_image
         self.preset_name = preset_name
         self.settings_path = settings_path
+        self._stop_requested = Event()
+        self._runner = None
+
+    def request_stop(self) -> None:
+        self._stop_requested.set()
+        if self._runner is not None:
+            self._runner.cancel()
+
+    def _attach_runner(self, runner) -> None:
+        self._runner = runner
+        if self._stop_requested.is_set():
+            runner.cancel()
 
     def run(self) -> None:
+        if self._stop_requested.is_set():
+            return
         stream = _SignalStream(self.log_message.emit)
         try:
             with redirect_stdout(stream), redirect_stderr(stream):
-                memory_image_metadata = build_memory_image_metadata(self.memory_image)
+                memory_image_metadata = build_memory_image_metadata(
+                    self.memory_image,
+                    should_cancel=self._stop_requested.is_set,
+                )
+                if self._stop_requested.is_set():
+                    return
                 results, preset = run_investigation(
                     self.memory_image,
                     self.preset_name,
                     settings_path=self.settings_path,
                     memory_image_metadata=memory_image_metadata,
+                    progress_callback=self.progress.emit,
+                    cancel_event=self._stop_requested,
+                    runner_created_callback=self._attach_runner,
                 )
+                if self._stop_requested.is_set():
+                    return
+                raw_plugin_outputs = {}
+                plugin_execution_log = []
+                if self._runner is not None:
+                    raw_plugin_outputs = dict(
+                        getattr(self._runner, "latest_raw_outputs", {}) or {}
+                    )
+                    plugin_execution_log = list(
+                        getattr(self._runner, "latest_plugin_execution_log", []) or []
+                    )
                 if not results:
                     self.completed.emit(
                         None,
@@ -109,19 +148,28 @@ class InvestigationWorker(QObject):
                         preset,
                         self.memory_image,
                         memory_image_metadata,
+                        raw_plugin_outputs,
                     )
                     return
 
                 analysis = analyse_artefacts(results)
+                analysis["plugin_execution_log"] = plugin_execution_log
+                if self._stop_requested.is_set():
+                    return
                 self.completed.emit(
                     results,
                     analysis,
                     preset,
                     self.memory_image,
                     memory_image_metadata,
+                    raw_plugin_outputs,
                 )
+        except (InterruptedError, VolatilityRunCancelled):
+            self.aborted.emit()
         except Exception:
             self.failed.emit(traceback.format_exc())
+        finally:
+            self._runner = None
 
 
 class PluginCatalogWorker(QObject):
@@ -157,8 +205,11 @@ class MainWindow(QMainWindow):
         self.current_preset: PluginPreset | None = None
         self.current_memory_image = ""
         self.current_memory_image_metadata = None
+        self.current_raw_plugin_outputs = {}
         self.worker_thread: QThread | None = None
         self.worker: InvestigationWorker | None = None
+        self._is_closing = False
+        self._completed_plugin_count = 0
         self.catalog_thread: QThread | None = None
         self.catalog_worker: PluginCatalogWorker | None = None
         self.active_theme_name = self._load_initial_theme_name()
@@ -276,11 +327,29 @@ class MainWindow(QMainWindow):
         self.run_button = QPushButton("Run Investigation")
         self.run_button.clicked.connect(self._start_investigation)
         action_row.addWidget(self.run_button)
+        self.abort_button = QPushButton("Abort Investigation")
+        self.abort_button.setObjectName("abortButton")
+        self.abort_button.setEnabled(False)
+        self.abort_button.clicked.connect(self._abort_investigation)
+        action_row.addWidget(self.abort_button)
         self.export_button = QPushButton("Export PDF Report")
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(self._export_pdf_report)
         action_row.addWidget(self.export_button)
         investigation_layout.addLayout(action_row)
+
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("(0/0)")
+        investigation_layout.addWidget(self.progress_bar)
+
+        self.progress_status_label = QLabel()
+        self.progress_status_label.setObjectName("catalogStatus")
+        self.progress_status_label.setWordWrap(True)
+        investigation_layout.addWidget(self.progress_status_label)
+
         self.report_safety_label = QLabel(REPORT_EXPORT_GUIDANCE)
         self.report_safety_label.setObjectName("catalogStatus")
         self.report_safety_label.setWordWrap(True)
@@ -337,6 +406,7 @@ class MainWindow(QMainWindow):
         self.findings_view.setReadOnly(True)
         self.timeline_view = TimelineView(self)
         self.timeline_graph_view = TimelineGraphView(self)
+        self.raw_plugin_output_view = RawPluginOutputView(self)
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
 
@@ -344,6 +414,7 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(self.findings_view, "Findings")
         self.tab_widget.addTab(self.timeline_view, "Timeline")
         self.tab_widget.addTab(self.timeline_graph_view, "Timeline Graph")
+        self.tab_widget.addTab(self.raw_plugin_output_view, "Raw Plugin Output")
         self.tab_widget.addTab(self.log_view, "Execution Log")
         results_layout.addWidget(self.tab_widget)
 
@@ -462,6 +533,75 @@ class MainWindow(QMainWindow):
         preset = self._current_preset()
         self.preset_plugin_table.set_plugins(preset.plugins, self.plugin_catalog)
         self.delete_preset_button.setEnabled(not preset.built_in)
+        if self.worker_thread is None:
+            self._set_investigation_progress(
+                0,
+                len(preset.plugins),
+                f"Ready to run preset '{preset.name}'.",
+            )
+
+    def _set_investigation_progress(
+        self,
+        completed: int,
+        total: int,
+        status_text: str,
+    ) -> None:
+        normalized_total = max(int(total), 0)
+        normalized_completed = max(0, min(int(completed), normalized_total))
+        self.progress_bar.setRange(0, max(normalized_total, 1))
+        self.progress_bar.setValue(normalized_completed)
+        self.progress_bar.setFormat(f"({normalized_completed}/{normalized_total})")
+        self.progress_status_label.setText(status_text)
+
+    def _current_investigation_progress(self) -> tuple[int, int]:
+        return self.progress_bar.value(), max(self.progress_bar.maximum(), 0)
+
+    @staticmethod
+    def _running_plugin_status(plugin_names: list[str]) -> str:
+        visible_names = [str(name).strip() for name in plugin_names if str(name).strip()]
+        if not visible_names:
+            return ""
+        if len(visible_names) == 1:
+            return f"Running {visible_names[0]}..."
+
+        preview = ", ".join(visible_names[:3])
+        if len(visible_names) > 3:
+            preview += f", +{len(visible_names) - 3} more"
+        return f"Running {len(visible_names)} plugins: {preview}..."
+
+    def _update_investigation_progress(self, payload: object) -> None:
+        if not isinstance(payload, dict):
+            return
+
+        total = int(payload.get("total") or 0)
+        completed = max(int(payload.get("completed") or 0), 0)
+        plugin_name = str(payload.get("plugin") or "").strip()
+        state = str(payload.get("state") or "").strip()
+        successful = int(payload.get("successful") or 0)
+        running_plugins = payload.get("running_plugins") or []
+        running_status = self._running_plugin_status(
+            list(running_plugins) if isinstance(running_plugins, (list, tuple)) else []
+        )
+
+        if state == "pending":
+            self._completed_plugin_count = 0
+        else:
+            self._completed_plugin_count = max(self._completed_plugin_count, completed)
+
+        if running_status:
+            status_text = running_status
+        elif state == "running" and plugin_name:
+            status_text = f"Running {plugin_name}..."
+        elif state == "completed" and plugin_name:
+            status_text = f"Completed {plugin_name}."
+        elif state == "failed" and plugin_name:
+            status_text = f"{plugin_name} failed."
+        elif state == "finished":
+            status_text = f"Finished {successful} of {total} plugins successfully."
+        else:
+            status_text = "Preparing plugin execution..."
+
+        self._set_investigation_progress(self._completed_plugin_count, total, status_text)
 
     def _browse_memory_image(self) -> None:
         selected, _ = QFileDialog.getOpenFileName(
@@ -523,10 +663,22 @@ class MainWindow(QMainWindow):
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         self.run_button.setEnabled(enabled)
+        self.abort_button.setEnabled(not enabled)
         self.save_preset_button.setEnabled(enabled)
         self.delete_preset_button.setEnabled(enabled and not self._current_preset().built_in)
         self.preset_combo.setEnabled(enabled)
         self.theme_combo.setEnabled(True)
+
+    def _abort_investigation(self) -> None:
+        if self.worker_thread is None or self.worker is None:
+            return
+
+        self.worker.request_stop()
+        completed, total = self._current_investigation_progress()
+        self._set_investigation_progress(completed, total, "Stopping investigation...")
+        self._append_log("\nAbort requested. Attempting to stop the investigation...\n")
+        self.statusBar().showMessage("Stopping investigation...", 5000)
+        self.abort_button.setEnabled(False)
 
     def _start_investigation(self) -> None:
         memory_image = self.memory_image_edit.text().strip()
@@ -547,8 +699,16 @@ class MainWindow(QMainWindow):
         self.findings_view.clear()
         self.timeline_view.set_timeline([])
         self.timeline_graph_view.set_timeline([])
+        self.raw_plugin_output_view.clear()
+        self.current_raw_plugin_outputs = {}
         self.export_button.setEnabled(False)
         self._set_controls_enabled(False)
+        self._set_investigation_progress(
+            0,
+            len(preset.plugins),
+            f"Starting preset '{preset.name}'...",
+        )
+        self._completed_plugin_count = 0
         self.statusBar().showMessage(
             f"Running preset '{preset.name}' against {memory_image}...",
         )
@@ -561,7 +721,9 @@ class MainWindow(QMainWindow):
         )
         self.worker.moveToThread(self.worker_thread)
         self.worker.log_message.connect(self._append_log)
+        self.worker.progress.connect(self._update_investigation_progress)
         self.worker.completed.connect(self._investigation_completed)
+        self.worker.aborted.connect(self._investigation_aborted)
         self.worker.failed.connect(self._investigation_failed)
         self.worker_thread.started.connect(self.worker.run)
         self.worker_thread.start()
@@ -571,13 +733,16 @@ class MainWindow(QMainWindow):
         self.log_view.insertPlainText(text)
         self.log_view.moveCursor(QTextCursor.MoveOperation.End)
 
-    def _cleanup_worker(self) -> None:
+    def _cleanup_worker(self, *, request_stop: bool = False, restore_controls: bool = True) -> None:
+        if request_stop and self.worker is not None:
+            self.worker.request_stop()
         if self.worker_thread is not None:
             self.worker_thread.quit()
             self.worker_thread.wait()
         self.worker_thread = None
         self.worker = None
-        self._set_controls_enabled(True)
+        if restore_controls:
+            self._set_controls_enabled(True)
 
     def _investigation_completed(
         self,
@@ -586,21 +751,37 @@ class MainWindow(QMainWindow):
         preset,
         memory_image: str,
         memory_image_metadata,
+        raw_plugin_outputs,
     ) -> None:
+        if self._is_closing:
+            self._cleanup_worker(restore_controls=False)
+            return
+
         self._cleanup_worker()
         self.current_results = results
         self.current_analysis = analysis
         self.current_preset = preset
         self.current_memory_image = memory_image
         self.current_memory_image_metadata = memory_image_metadata
+        self.current_raw_plugin_outputs = dict(raw_plugin_outputs or {})
 
         if not results or not analysis:
+            total_plugins = len(preset.plugins) if preset is not None else 0
+            self._set_investigation_progress(
+                total_plugins,
+                total_plugins,
+                "Investigation finished without results.",
+            )
             self.summary_view.setPlainText(
                 "Investigation did not produce analysis results. Review the execution log for details."
             )
             self.findings_view.setPlainText("")
             self.timeline_view.set_timeline([])
             self.timeline_graph_view.set_timeline([])
+            self.raw_plugin_output_view.set_results(
+                results or {},
+                self.current_raw_plugin_outputs,
+            )
             self.export_button.setEnabled(False)
             self.statusBar().showMessage("Investigation finished without results.", 5000)
             return
@@ -613,6 +794,15 @@ class MainWindow(QMainWindow):
                 memory_image_metadata=memory_image_metadata,
             ),
         )
+        self._set_investigation_progress(
+            len(preset.plugins),
+            len(preset.plugins),
+            f"Finished preset '{preset.name}'.",
+        )
+        self.raw_plugin_output_view.set_results(
+            results,
+            self.current_raw_plugin_outputs,
+        )
         self._populate_report_views(report)
         self.export_button.setEnabled(True)
         self.statusBar().showMessage(
@@ -621,6 +811,10 @@ class MainWindow(QMainWindow):
         )
 
     def _investigation_failed(self, error_text: str) -> None:
+        if self._is_closing:
+            self._cleanup_worker(restore_controls=False)
+            return
+
         self._cleanup_worker()
         self.summary_view.setPlainText(
             "An unexpected error interrupted the investigation. Review the execution log for details."
@@ -628,7 +822,10 @@ class MainWindow(QMainWindow):
         self.findings_view.setPlainText("")
         self.timeline_view.set_timeline([])
         self.timeline_graph_view.set_timeline([])
+        self.raw_plugin_output_view.clear()
+        self.current_raw_plugin_outputs = {}
         self.export_button.setEnabled(False)
+        self.progress_status_label.setText("Investigation failed.")
         self._append_log(error_text)
         QMessageBox.critical(
             self,
@@ -636,6 +833,20 @@ class MainWindow(QMainWindow):
             "The investigation failed unexpectedly. Review the execution log for details.",
         )
         self.statusBar().showMessage("Investigation failed.", 5000)
+
+    def _investigation_aborted(self) -> None:
+        if self._is_closing:
+            self._cleanup_worker(restore_controls=False)
+            return
+
+        self._cleanup_worker()
+        self.export_button.setEnabled(False)
+        completed, total = self._current_investigation_progress()
+        self._set_investigation_progress(completed, total, "Investigation aborted.")
+        self._append_log("\nInvestigation aborted by user.\n")
+        self.raw_plugin_output_view.clear()
+        self.current_raw_plugin_outputs = {}
+        self.statusBar().showMessage("Investigation aborted.", 5000)
 
     def _populate_report_views(self, report: Mapping[str, object]) -> None:
         risk_summary = report.get("risk_summary", {})
@@ -666,8 +877,13 @@ class MainWindow(QMainWindow):
                 f"[{finding.get('severity_label', 'Unknown')} | Risk {finding.get('risk_score', 0)}]"
             )
             finding_lines.append(f"Category: {finding.get('category', 'Finding')}")
-            if finding.get("affected_asset"):
+            if finding.get("show_affected_asset") and finding.get("affected_asset"):
                 finding_lines.append(f"Affected asset: {finding.get('affected_asset')}")
+            affected_pids = finding.get("affected_pids", [])
+            if finding.get("show_affected_pids") and affected_pids:
+                finding_lines.append(
+                    f"{finding.get('affected_pid_label', 'Affected PIDs')}: {', '.join(str(pid) for pid in affected_pids)}"
+                )
             finding_lines.append(f"Summary: {finding.get('summary', '')}")
             finding_lines.append(f"What it means: {finding.get('meaning', '')}")
             mitre = finding.get("mitre", [])
@@ -739,6 +955,8 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:
+        self._is_closing = True
+        self._cleanup_worker(request_stop=True, restore_controls=False)
         if self.catalog_thread is not None:
             self.catalog_thread.quit()
             self.catalog_thread.wait()

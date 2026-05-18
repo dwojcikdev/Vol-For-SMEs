@@ -1,5 +1,6 @@
 from .app import create_application, main
 from .main_window import MainWindow
+from .raw_plugin_output_view import RawPluginOutputView
 from .timeline_graph_view import TimelineGraphView
 from .timeline_view import TimelineView
 from .widgets import PluginSelectionDialog, PluginTableWidget
@@ -10,6 +11,7 @@ __all__ = [
     "main",
     "PluginSelectionDialog",
     "PluginTableWidget",
+    "RawPluginOutputView",
     "TimelineGraphView",
     "TimelineView",
 ]
