@@ -73,6 +73,9 @@ def run_investigation(
     preset_name=DEFAULT_PLUGIN_GROUP_NAME,
     settings_path=None,
     memory_image_metadata=None,
+    progress_callback=None,
+    cancel_event=None,
+    runner_created_callback=None,
 ):
     volatility_command = resolve_project_volatility_command()
     if volatility_command is None:
@@ -88,7 +91,14 @@ def run_investigation(
 
     try:
         if memory_image_metadata is None:
-            memory_image_metadata = build_memory_image_metadata(memory_image)
+            memory_image_metadata = build_memory_image_metadata(
+                memory_image,
+                should_cancel=(
+                    cancel_event.is_set
+                    if cancel_event is not None
+                    else None
+                ),
+            )
     except OSError as exc:
         print(f"\nCould not prepare the memory image for analysis: {exc}")
         print("\nInvestigation could not start.")
@@ -100,7 +110,11 @@ def run_investigation(
     _display_memory_image_metadata(memory_image_metadata)
 
     print("\nDetecting operating system...\n")
-    os_info = detect_os(memory_image, volatility_command)
+    os_info = detect_os(
+        memory_image,
+        volatility_command,
+        cancel_event=cancel_event,
+    )
 
     display_os_detection_result(os_info)
 
@@ -115,6 +129,8 @@ def run_investigation(
     print("\nInitialising Volatility runner...\n")
 
     runner = VolatilityRunner(memory_image, volatility_command, os_context=os_info)
+    if runner_created_callback is not None:
+        runner_created_callback(runner)
     plugins = list(preset.plugins)
 
     print(
@@ -125,7 +141,10 @@ def run_investigation(
         print(f"- {plugin}")
     print()
 
-    results = runner.run_multiple(plugins)
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("Operation cancelled.")
+
+    results = runner.run_multiple(plugins, progress_callback=progress_callback)
 
     print("\nPlugin execution complete.\n")
 

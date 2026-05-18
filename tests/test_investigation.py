@@ -46,7 +46,10 @@ def test_run_investigation_uses_selected_preset(
         ["vol"],
         os_context={"os": "Windows"},
     )
-    runner.run_multiple.assert_called_once_with(["windows.malfind", "windows.handles"])
+    runner.run_multiple.assert_called_once_with(
+        ["windows.malfind", "windows.handles"],
+        progress_callback=None,
+    )
 
 
 def test_build_report_case_metadata_includes_memory_image_metadata():
