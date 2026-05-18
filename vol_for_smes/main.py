@@ -32,7 +32,8 @@ def display_analysis_results(analysis):
     risk_summary = analysis.get("risk_summary", {})
     process_analysis = analysis.get("process_analysis", {})
     network_analysis = analysis.get("network_analysis", {})
-    timeline = analysis.get("timeline", [])
+    activity_chains = analysis.get("activity_chains", [])
+    timeline = analysis.get("suspicious_timeline") or analysis.get("timeline", [])
 
     print("\nAnalysis Summary:\n")
     print(
@@ -44,27 +45,39 @@ def display_analysis_results(analysis):
         )
     )
 
-    interesting_findings = [
-        finding
-        for finding in plugin_findings.values()
-        if finding.get("severity") in {"high", "medium"}
-    ]
-
-    if interesting_findings:
-        print("\nPotentially suspicious findings:\n")
-        for finding in sorted(
-            interesting_findings,
-            key=lambda item: {"high": 0, "medium": 1}.get(item.get("severity"), 2),
-        ):
+    if activity_chains:
+        print("\nCorrelated activity chains:\n")
+        for chain in activity_chains[:5]:
             print(
-                f"[{finding['severity'].upper()}] {finding['plugin']}: {finding['summary']}"
+                f"[{chain['severity'].upper()}] {chain.get('title', 'Correlated activity chain')}"
             )
-            print(f"  Risk score: {finding.get('risk_score', 0)}")
-            print(f"  MITRE ATT&CK: {_format_mitre_tags(finding.get('mitre_tags', []))}")
-            for indicator in finding.get("indicators", [])[:5]:
-                print(f"  - {indicator}")
+            print(f"  Risk score: {chain.get('risk_score', 0)}")
+            print(f"  MITRE ATT&CK: {_format_mitre_tags(chain.get('mitre_tags', []))}")
+            print(f"  Summary: {chain.get('summary', '')}")
+            for evidence in chain.get("evidence", [])[:4]:
+                print(f"  - {evidence}")
     else:
-        print("\nNo medium or high severity findings were identified.\n")
+        interesting_findings = [
+            finding
+            for finding in plugin_findings.values()
+            if finding.get("severity") in {"high", "medium"}
+        ]
+
+        if interesting_findings:
+            print("\nPotentially suspicious findings:\n")
+            for finding in sorted(
+                interesting_findings,
+                key=lambda item: {"high": 0, "medium": 1}.get(item.get("severity"), 2),
+            ):
+                print(
+                    f"[{finding['severity'].upper()}] {finding['plugin']}: {finding['summary']}"
+                )
+                print(f"  Risk score: {finding.get('risk_score', 0)}")
+                print(f"  MITRE ATT&CK: {_format_mitre_tags(finding.get('mitre_tags', []))}")
+                for indicator in finding.get("indicators", [])[:5]:
+                    print(f"  - {indicator}")
+        else:
+            print("\nNo medium or high severity findings were identified.\n")
 
     process_summary = process_analysis.get("summary")
     suspicious_processes = process_analysis.get("suspicious_processes", [])

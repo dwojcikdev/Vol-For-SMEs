@@ -4,6 +4,7 @@ Build human-readable forensic reports from analysis output.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, List, Optional
 
 SEVERITY_LABELS = {
@@ -100,6 +101,15 @@ TECHNIQUE_EXPLANATIONS = {
             "Confirm whether the binary's invocation is consistent with approved software usage.",
             "Review the command line, loaded modules, and spawned child processes.",
             "Apply allowlisting and detection rules for known LOLBin abuse patterns.",
+        ],
+    },
+    "T1486": {
+        "attack": "Data Encrypted for Impact",
+        "meaning": "Files or ransom-note artefacts suggest the host may have been impacted by ransomware-style encryption activity.",
+        "remediations": [
+            "Identify the process or service responsible for the file activity and isolate the host.",
+            "Preserve the memory image and affected files before recovery actions begin.",
+            "Look for ransom notes, renamed files, and backups or snapshots that can support restoration.",
         ],
     },
     "T1543.003": {
@@ -231,6 +241,96 @@ def _format_mitre_list(mitre_tags: Iterable[Dict[str, str]]) -> List[str]:
     ]
 
 
+def _normalise_pid_list(values: Optional[Iterable[Any]]) -> List[str]:
+    pids: List[str] = []
+    seen = set()
+
+    for value in values or ():
+        pid = str(value or "").strip()
+        if not pid or pid == "?":
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        pids.append(pid)
+
+    return pids
+
+
+def _title_mentions_pid(title: str, pid: str) -> bool:
+    title_text = str(title or "").lower()
+    pid_text = str(pid or "").strip()
+    if not pid_text:
+        return False
+
+    return bool(re.search(rf"\bpid\s*[:=]?\s*{re.escape(pid_text)}\b", title_text, re.IGNORECASE))
+
+
+def _should_display_affected_asset(title: str, affected_asset: str) -> bool:
+    asset = str(affected_asset or "").strip()
+    if not asset:
+        return False
+    return not bool(re.search(rf"\b{re.escape(asset)}\b", str(title or ""), re.IGNORECASE))
+
+
+def _should_display_affected_pids(title: str, affected_pids: Iterable[str]) -> bool:
+    pid_list = _normalise_pid_list(affected_pids)
+    if not pid_list:
+        return False
+    if len(pid_list) == 1:
+        return not _title_mentions_pid(title, pid_list[0])
+    return True
+
+
+def _affected_pid_label(category: str, affected_pids: Iterable[str]) -> str:
+    pid_list = _normalise_pid_list(affected_pids)
+    if not pid_list:
+        return ""
+    if category == "Correlated Activity Chain" and len(pid_list) > 1:
+        return "Related PIDs"
+    return "Affected PID" if len(pid_list) == 1 else "Affected PIDs"
+
+
+def _append_unique_evidence_line(lines: List[str], value: str) -> None:
+    line = str(value or "").strip()
+    if line and line not in lines:
+        lines.append(line)
+
+
+def _process_structured_evidence(process: Dict[str, Any]) -> List[str]:
+    evidence_lines: List[str] = []
+    evidence = process.get("evidence", {}) if isinstance(process.get("evidence"), dict) else {}
+
+    for hit in process.get("reference_hits", []):
+        if not isinstance(hit, dict):
+            continue
+        pattern = str(hit.get("pattern", "")).strip()
+        path = str(hit.get("path", "")).strip()
+        confidence = str(hit.get("confidence", "")).strip()
+        scope = str(hit.get("match_scope", "")).strip()
+
+        if pattern:
+            reference_line = f"Matched reference pattern: {pattern}"
+            if confidence or scope:
+                reference_line += f" ({confidence or 'low'}, {scope or 'path'})"
+            _append_unique_evidence_line(evidence_lines, reference_line)
+        if path:
+            _append_unique_evidence_line(evidence_lines, f"Matched path: {path}")
+
+    image_path = str(evidence.get("image_path", "")).strip()
+    if image_path:
+        _append_unique_evidence_line(evidence_lines, f"Image path: {image_path}")
+
+    command_line = str(process.get("command_line", "")).strip()
+    if command_line:
+        _append_unique_evidence_line(evidence_lines, f"Command line: {command_line}")
+
+    for reason in process.get("reasons", []):
+        _append_unique_evidence_line(evidence_lines, reason)
+
+    return evidence_lines
+
+
 def _build_finding_entry(
     *,
     title: str,
@@ -243,9 +343,11 @@ def _build_finding_entry(
     fallback_attack: str,
     extra_remediations: Optional[Iterable[str]] = None,
     affected_asset: Optional[str] = None,
+    affected_pids: Optional[Iterable[Any]] = None,
 ) -> Dict[str, Any]:
     mitre_tags = list(mitre_tags)
     evidence = [str(item) for item in evidence if item]
+    normalised_pids = _normalise_pid_list(affected_pids)
     return {
         "title": title,
         "category": category,
@@ -254,6 +356,10 @@ def _build_finding_entry(
         "risk_score": risk_score,
         "summary": summary,
         "affected_asset": affected_asset or "",
+        "affected_pids": normalised_pids,
+        "show_affected_asset": _should_display_affected_asset(title, affected_asset or ""),
+        "show_affected_pids": _should_display_affected_pids(title, normalised_pids),
+        "affected_pid_label": _affected_pid_label(category, normalised_pids),
         "attack": _compose_attack_name(mitre_tags, fallback_attack),
         "meaning": _compose_meaning(summary, mitre_tags),
         "mitre": _format_mitre_list(mitre_tags),
@@ -302,11 +408,51 @@ def _build_plugin_finding_entries(plugin_findings: Dict[str, Dict[str, Any]]) ->
     return entries
 
 
+def _build_activity_chain_entries(activity_chains: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    entries = []
+    for chain in activity_chains:
+        if not isinstance(chain, dict):
+            continue
+        primary_process = chain.get("primary_process", {})
+        primary_label = (
+            primary_process.get("name") or "unknown process"
+            if isinstance(primary_process, dict)
+            else "unknown process"
+        )
+        related_pids = [
+            process.get("pid")
+            for process in chain.get("related_processes", [])
+            if isinstance(process, dict)
+        ]
+        if not related_pids and isinstance(primary_process, dict):
+            related_pids.append(primary_process.get("pid"))
+        entries.append(
+            _build_finding_entry(
+                title=chain.get("title", "Correlated activity chain"),
+                category="Correlated Activity Chain",
+                severity=chain.get("severity", "none"),
+                risk_score=int(chain.get("risk_score", 0)),
+                summary=chain.get("summary", ""),
+                evidence=chain.get("evidence", []),
+                mitre_tags=chain.get("mitre_tags", []),
+                fallback_attack="Correlated suspicious activity",
+                extra_remediations=[
+                    "Review the linked process tree, related file activity, and nearby timeline events together rather than in isolation.",
+                    "Preserve the referenced files and process binaries before remediation or cleanup.",
+                ],
+                affected_asset=primary_label,
+                affected_pids=related_pids,
+            )
+        )
+    return entries
+
+
 def _build_process_finding_entries(process_analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
     entries = []
     for process in process_analysis.get("suspicious_processes", []):
         name = process.get("name") or "unknown process"
         pid = process.get("pid") or "?"
+        evidence_lines = _process_structured_evidence(process)
         entries.append(
             _build_finding_entry(
                 title=f"Suspicious process: {name} (PID {pid})",
@@ -314,14 +460,15 @@ def _build_process_finding_entries(process_analysis: Dict[str, Any]) -> List[Dic
                 severity=process.get("severity", "none"),
                 risk_score=int(process.get("risk_score", 0)),
                 summary=", ".join(process.get("reasons", [])) or process_analysis.get("summary", ""),
-                evidence=process.get("reasons", []),
+                evidence=evidence_lines,
                 mitre_tags=process.get("mitre_tags", []),
                 fallback_attack="Suspicious process behaviour",
                 extra_remediations=[
                     "Review the process parent, command line, loaded modules, and associated user account.",
                     "Collect the process binary and any referenced scripts for malware analysis.",
                 ],
-                affected_asset=f"{name} (PID {pid})",
+                affected_asset=name,
+                affected_pids=[pid],
             )
         )
     return entries
@@ -348,7 +495,8 @@ def _build_network_finding_entries(network_analysis: Dict[str, Any]) -> List[Dic
                     "Check whether the remote endpoint is known, internal, or already blocked by security controls.",
                     "Review proxy, DNS, and firewall logs for related traffic from the same host.",
                 ],
-                affected_asset=f"{owner} (PID {pid})",
+                affected_asset=owner,
+                affected_pids=[pid],
             )
         )
     return entries
@@ -369,7 +517,8 @@ def _executive_summary(analysis: Dict[str, Any], findings: List[Dict[str, Any]])
     risk_summary = analysis.get("risk_summary", {})
     process_analysis = analysis.get("process_analysis", {})
     network_analysis = analysis.get("network_analysis", {})
-    timeline = analysis.get("timeline", [])
+    activity_chains = analysis.get("activity_chains", [])
+    timeline = analysis.get("suspicious_timeline") or analysis.get("timeline", [])
 
     lines = [
         (
@@ -380,6 +529,15 @@ def _executive_summary(analysis: Dict[str, Any], findings: List[Dict[str, Any]])
         process_analysis.get("summary", "No process summary available."),
         network_analysis.get("summary", "No network summary available."),
     ]
+
+    if activity_chains:
+        top_chain = activity_chains[0]
+        lines.append(
+            f"{len(activity_chains)} correlated activity chain(s) were built from process, file, handle, and timeline evidence."
+        )
+        lines.append(
+            f"The strongest chain is '{top_chain.get('title', 'Correlated activity chain')}' with risk score {top_chain.get('risk_score', 0)}."
+        )
 
     if findings:
         top_finding = findings[0]
@@ -403,10 +561,12 @@ def build_analysis_report(
     """
     analysis = dict(analysis) if isinstance(analysis, dict) else {}
     case_metadata = dict(case_metadata or {})
+    chain_entries = _build_activity_chain_entries(analysis.get("activity_chains", []))
     plugin_entries = _build_plugin_finding_entries(analysis.get("plugin_findings", {}))
     process_entries = _build_process_finding_entries(analysis.get("process_analysis", {}))
     network_entries = _build_network_finding_entries(analysis.get("network_analysis", {}))
-    findings = _sort_findings(plugin_entries + process_entries + network_entries)
+    findings = chain_entries + _sort_findings(plugin_entries + process_entries + network_entries)
+    report_timeline = analysis.get("suspicious_timeline") or analysis.get("timeline", [])
 
     return {
         "title": case_metadata.get("title", "Vol For SMEs Memory Analysis Report"),
@@ -415,8 +575,10 @@ def build_analysis_report(
         "risk_summary": analysis.get("risk_summary", {}),
         "executive_summary": _executive_summary(analysis, findings),
         "findings": findings,
-        "timeline": analysis.get("timeline", []),
+        "timeline": report_timeline,
+        "activity_chains": analysis.get("activity_chains", []),
         "process_analysis": analysis.get("process_analysis", {}),
         "network_analysis": analysis.get("network_analysis", {}),
         "plugin_findings": analysis.get("plugin_findings", {}),
+        "plugin_execution_log": analysis.get("plugin_execution_log", []),
     }

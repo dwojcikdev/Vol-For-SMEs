@@ -172,8 +172,13 @@ def _report_lines(report: Dict[str, object]) -> List[Tuple[str, int]]:
                 font_size=12,
             )
             add_block(f"Category: {finding.get('category', 'Finding')}")
-            if finding.get("affected_asset"):
+            if finding.get("show_affected_asset") and finding.get("affected_asset"):
                 add_block(f"Affected asset: {finding.get('affected_asset')}")
+            affected_pids = finding.get("affected_pids", [])
+            if finding.get("show_affected_pids") and affected_pids:
+                add_block(
+                    f"{finding.get('affected_pid_label', 'Affected PIDs')}: {', '.join(str(pid) for pid in affected_pids)}"
+                )
             add_block(f"Summary: {finding.get('summary', '')}")
             add_block(f"Possible attack: {finding.get('attack', 'Unknown')}")
             add_block(f"What it means: {finding.get('meaning', '')}")
