@@ -18,10 +18,19 @@ __pycache__/
 .pytest-work-local/
 .pytest-legacy-smoke/
 .pytest-run-*/
+.pytest-tmp/
+.pytest-tmp-verify-*/
+.pytest_gui_tmp/
+.pytest_temp/
 basetemp_*/
 pytest-cache-files-*/
 .tmp_pytest_gui/
 .codex-pytest-temp/
+.codex-pytest-tmp/
+.codex-gui-test-run/
+.codex-report-check/
+.test-artifacts/
+.test-scratch/
 .coverage
 htmlcov/
 coverage.xml
@@ -38,6 +47,7 @@ env/
 build/
 dist/
 *.egg-info/
+.volatility-cache/
 
 # Editor and OS noise
 .vscode/settings.json
