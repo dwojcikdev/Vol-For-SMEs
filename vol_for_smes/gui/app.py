@@ -8,10 +8,12 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
+from ..utils.app_mutex import hold_app_mutex
 from .main_window import MainWindow
 
 
 def create_application(argv: list[str] | None = None) -> QApplication:
+    hold_app_mutex()
     app = QApplication.instance()
     if app is not None:
         return app
