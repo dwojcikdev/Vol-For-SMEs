@@ -43,9 +43,7 @@ data/user_settings.json
 venv/
 env/
 
-# Build artifacts
-build/
-dist/
+# Packaging metadata and cache
 *.egg-info/
 .volatility-cache/
 

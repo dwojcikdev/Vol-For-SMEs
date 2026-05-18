@@ -1,0 +1,13 @@
+{
+  "app_name": "Vol For SMEs",
+  "app_version": "0.1.0",
+  "python_version": "3.12.10",
+  "python_root": "C:\\Users\\dawid\\AppData\\Local\\Programs\\Python\\Python312",
+  "bundled_distributions": {
+    "pefile": "2024.8.26",
+    "PyQt6": "6.11.0",
+    "PyQt6-Qt6": "6.11.0",
+    "PyQt6_sip": "13.11.1",
+    "volatility3": "2.28.0"
+  }
+}
