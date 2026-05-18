@@ -73,6 +73,7 @@ _LOW_VALUE_FIELD_HINTS = (
     "lastaccess",
     "changed",
 )
+_OFFSET_TIMELINE_BASE = datetime(2000, 1, 1)
 
 
 def _safe_lower(value: Any) -> str:
@@ -82,6 +83,13 @@ def _safe_lower(value: Any) -> str:
 def _safe_int(value: Any) -> int | None:
     try:
         return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return None
 
@@ -209,6 +217,15 @@ def _format_duration(span: timedelta) -> str:
     if seconds or not parts:
         parts.append(f"{seconds}s")
     return " ".join(parts)
+
+
+def _format_offset_seconds(value: float) -> str:
+    total_seconds = max(float(value or 0.0), 0.0)
+    hours, remainder = divmod(total_seconds, 3600.0)
+    minutes, seconds = divmod(remainder, 60.0)
+    if hours >= 1:
+        return f"{int(hours):02d}h {int(minutes):02d}m {seconds:05.2f}s"
+    return f"{int(minutes):02d}m {seconds:05.2f}s"
 
 
 def _pluralize(value: int, singular: str, plural: str | None = None) -> str:
@@ -511,6 +528,7 @@ class TimelineGraphView(QWidget):
         self._lane_count = 0
         self._relationship_count = 0
         self._current_mode = "focus"
+        self._time_mode = "timestamp"
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -574,6 +592,7 @@ class TimelineGraphView(QWidget):
         return self._relationship_count
 
     def set_timeline(self, events: Iterable[Mapping[str, object]]) -> None:
+        self._time_mode = "timestamp"
         prepared_events = []
         for event in events or []:
             if not isinstance(event, Mapping):
@@ -647,19 +666,139 @@ class TimelineGraphView(QWidget):
         self._configure_default_mode()
         self._refresh_view(reset_selection=True, reset_detail_view=True)
 
+    def set_execution_log(self, entries: Iterable[Mapping[str, object]]) -> None:
+        self._time_mode = "offset"
+        prepared_events = []
+
+        for entry in entries or []:
+            if not isinstance(entry, Mapping):
+                continue
+
+            plugin_name = str(entry.get("plugin") or "").strip()
+            if not plugin_name:
+                continue
+
+            started_offset = _safe_float(entry.get("started_offset_seconds"))
+            finished_offset = _safe_float(entry.get("finished_offset_seconds"))
+            elapsed_seconds = _safe_float(entry.get("elapsed_seconds"))
+            success_value = entry.get("success")
+            success = bool(True if success_value is None else success_value)
+            error_message = str(entry.get("error_message") or "").strip()
+
+            if started_offset is None:
+                started_offset = 0.0
+            if finished_offset is None:
+                finished_offset = started_offset
+            if elapsed_seconds is None:
+                elapsed_seconds = max(0.0, finished_offset - started_offset)
+
+            row_mapping = {
+                "plugin": plugin_name,
+                "status": "completed" if success else "failed",
+                "started_offset_seconds": started_offset,
+                "finished_offset_seconds": finished_offset,
+                "elapsed_seconds": elapsed_seconds,
+            }
+            if error_message:
+                row_mapping["error_message"] = error_message
+
+            base_event = {
+                "plugin": plugin_name,
+                "entity_label": plugin_name,
+                "display_label": plugin_name,
+                "lane_key": f"plugin:{_safe_lower(plugin_name)}",
+                "pid": None,
+                "ppid": None,
+                "category": "other" if success else "service",
+                "raw_value": None,
+                "row": row_mapping,
+                "status": row_mapping["status"],
+                "elapsed_seconds": elapsed_seconds,
+                "error_message": error_message,
+            }
+            prepared_events.append(
+                {
+                    **base_event,
+                    "timestamp": _OFFSET_TIMELINE_BASE + timedelta(seconds=started_offset),
+                    "timestamp_text": _format_offset_seconds(started_offset),
+                    "field": "start",
+                    "description": f"{plugin_name} started",
+                }
+            )
+            prepared_events.append(
+                {
+                    **base_event,
+                    "timestamp": _OFFSET_TIMELINE_BASE + timedelta(seconds=finished_offset),
+                    "timestamp_text": _format_offset_seconds(finished_offset),
+                    "field": "finish",
+                    "description": (
+                        f"{plugin_name} completed "
+                        f"(runtime {_format_offset_seconds(elapsed_seconds)})"
+                        if success
+                        else f"{plugin_name} failed (runtime {_format_offset_seconds(elapsed_seconds)})"
+                    )
+                    + (f": {error_message}" if error_message else ""),
+                }
+            )
+
+        prepared_events.sort(
+            key=lambda item: (
+                item["timestamp"],
+                item["lane_key"],
+                item["field"],
+                item["plugin"],
+            )
+        )
+
+        self._all_events = prepared_events
+        self._focus_events = list(prepared_events)
+        self._configure_default_mode()
+        self._refresh_view(reset_selection=True, reset_detail_view=True)
+
+    def _time_offset_seconds(self, value: datetime) -> float:
+        return max((value - _OFFSET_TIMELINE_BASE).total_seconds(), 0.0)
+
+    def _format_axis_time_label(self, value: datetime, span: timedelta) -> str:
+        if self._time_mode == "offset":
+            return _format_offset_seconds(self._time_offset_seconds(value))
+        return _format_timestamp_label(value, span)
+
+    def _format_summary_time_value(self, value: datetime) -> str:
+        if self._time_mode == "offset":
+            return _format_offset_seconds(self._time_offset_seconds(value))
+        return _format_summary_time(value)
+
+    def _summary_mode_label(self) -> str:
+        if self._time_mode == "offset":
+            return "plugin execution events"
+        if self._active_events is self._focus_events and self._focus_events:
+            return "investigation events"
+        return "all timestamped events"
+
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if event.type() in {QEvent.Type.PaletteChange, QEvent.Type.StyleChange}:
             self._refresh_view(reset_selection=False, reset_detail_view=False)
 
     def _configure_default_mode(self) -> None:
+        self.filter_combo.blockSignals(True)
+        if self._time_mode == "offset":
+            self._current_mode = "all"
+            self.filter_combo.setItemText(0, "Execution Timeline")
+            self.filter_combo.setItemText(1, "Execution Timeline")
+            self.filter_combo.setCurrentIndex(1)
+            self.filter_combo.setEnabled(False)
+            self.filter_combo.blockSignals(False)
+            return
+
+        self.filter_combo.setItemText(0, "Investigation Events")
+        self.filter_combo.setItemText(1, "All Timestamped Events")
         use_focus_mode = (
             len(self._focus_events) >= 2
             and len(self._focus_events) < len(self._all_events)
         )
         self._current_mode = "focus" if use_focus_mode else "all"
 
-        self.filter_combo.blockSignals(True)
         self.filter_combo.setCurrentIndex(0 if self._current_mode == "focus" else 1)
         self.filter_combo.setEnabled(
             bool(self._focus_events) and len(self._focus_events) < len(self._all_events)
@@ -667,6 +806,10 @@ class TimelineGraphView(QWidget):
         self.filter_combo.blockSignals(False)
 
     def _filter_mode_changed(self, index: int) -> None:
+        if self._time_mode == "offset":
+            self._current_mode = "all"
+            self._refresh_view(reset_selection=True, reset_detail_view=True)
+            return
         selected_mode = str(self.filter_combo.itemData(index) or "all")
         self._current_mode = selected_mode
         self._refresh_view(reset_selection=True, reset_detail_view=True)
@@ -696,24 +839,34 @@ class TimelineGraphView(QWidget):
         if not self._active_events:
             self._lane_count = 0
             self._relationship_count = 0
-            self.summary_label.setText(
-                "No timeline graph is available for the current investigation. "
-                "Run an investigation with timestamped artefacts to unlock the "
-                "overview, detail view, and node inspection."
-            )
-            self.overview_label.setText(
-                "When timeline data is available, the overview will let you brush "
-                "across dense periods instead of reading every node at once."
-            )
-            self.focus_label.setText(
-                "Hover will show quick summaries, and clicking a node will open "
-                "full evidence in the panel on the right."
-            )
+            if self._time_mode == "offset":
+                self.summary_label.setText(
+                    "Timeline unavailable. Plugin execution timing was not captured for the current investigation."
+                )
+                self.overview_label.setText(
+                    "Run an investigation that records plugin execution timing to unlock the overview and graph."
+                )
+                self.focus_label.setText(
+                    "When execution timing is available, the graph will map plugin start and finish events onto a dump-relative time axis."
+                )
+                self.details_view.setPlainText(
+                    "No plugin execution details are available yet."
+                )
+            else:
+                self.summary_label.setText(
+                    "Timeline unavailable. No memory-dump-derived timestamps were available for the current investigation."
+                )
+                self.overview_label.setText(
+                    "Run an investigation with timestamped artefacts from the memory image to unlock the overview and graph."
+                )
+                self.focus_label.setText(
+                    "When forensic timestamps are available, the graph will map related events onto the recovered memory timeline."
+                )
+                self.details_view.setPlainText(
+                    "No forensic timeline details are available yet."
+                )
             self.overview_widget.set_overview([], start_label="", end_label="")
             self.overview_widget.set_selection(0.0, 1.0)
-            self.details_view.setPlainText(
-                "No timeline details are available yet."
-            )
             self._rebuild_detail_scene([], reset_view=reset_detail_view)
             return
 
@@ -733,11 +886,11 @@ class TimelineGraphView(QWidget):
         overview_counts = self._build_overview_counts(self._active_events)
         self.overview_widget.set_overview(
             overview_counts,
-            start_label=_format_timestamp_label(
+            start_label=self._format_axis_time_label(
                 timeline_start,
                 timeline_end - timeline_start,
             ),
-            end_label=_format_timestamp_label(
+            end_label=self._format_axis_time_label(
                 timeline_end,
                 timeline_end - timeline_start,
             ),
@@ -772,42 +925,65 @@ class TimelineGraphView(QWidget):
             selected_events = [nearest_event]
 
         visible_lane_count = len({event["lane_key"] for event in selected_events})
-        mode_label = (
-            "investigation events"
-            if self._active_events is self._focus_events and self._focus_events
-            else "all timestamped events"
-        )
+        mode_label = self._summary_mode_label()
         total_bounds = _timeline_bounds(self._all_events)
         assert total_bounds is not None
         total_span = total_bounds[1] - total_bounds[0]
-
-        self.summary_label.setText(
-            f"Showing {len(self._active_events)} {mode_label} from "
-            f"{len(self._all_events)} total timeline {_pluralize(len(self._all_events), 'event')}. "
-            f"Observed range: {_format_summary_time(total_bounds[0])} to "
-            f"{_format_summary_time(total_bounds[1])} ({_format_duration(total_span)}). "
-            "Use the overview to select a dense period, then drag to pan and hold Ctrl "
-            "+ mouse wheel to zoom the detailed graph."
-        )
-        self.overview_label.setText(
-            "The overview compresses the full sample range into a density strip so "
-            "you can brush a smaller investigation window instead of rendering every "
-            "event at full scale."
-        )
-        self.focus_label.setText(
-            f"Focused window: {_format_summary_time(selected_events[0]['timestamp'])} to "
-            f"{_format_summary_time(selected_events[-1]['timestamp'])}. "
-            f"{len(selected_events)} {_pluralize(len(selected_events), 'event')} across "
-            f"{visible_lane_count} {_pluralize(visible_lane_count, 'lane')}. "
-            "Hover a node for a quick summary or click it to inspect the underlying evidence."
-        )
+        if self._time_mode == "offset":
+            self.summary_label.setText(
+                f"Showing {len(self._active_events)} {mode_label} across "
+                f"{len({event['lane_key'] for event in self._all_events})} "
+                f"{_pluralize(len({event['lane_key'] for event in self._all_events}), 'plugin')}. "
+                f"Observed range: {self._format_summary_time_value(total_bounds[0])} to "
+                f"{self._format_summary_time_value(total_bounds[1])} "
+                f"({_format_offset_seconds(total_span.total_seconds())} total runtime). "
+                "Use the overview to focus on a portion of the dump analysis, then drag to pan and hold Ctrl + mouse wheel to zoom the detailed graph."
+            )
+            self.overview_label.setText(
+                "The overview compresses the plugin execution window into a density strip so you can inspect busy periods without losing the full run length."
+            )
+            self.focus_label.setText(
+                f"Focused window: {self._format_summary_time_value(selected_events[0]['timestamp'])} to "
+                f"{self._format_summary_time_value(selected_events[-1]['timestamp'])}. "
+                f"{len(selected_events)} {_pluralize(len(selected_events), 'event')} across "
+                f"{visible_lane_count} {_pluralize(visible_lane_count, 'plugin')}. "
+                "Hover a node for a quick summary or click it to inspect the plugin details."
+            )
+        else:
+            self.summary_label.setText(
+                f"Showing {len(self._active_events)} {mode_label} from "
+                f"{len(self._all_events)} total timeline {_pluralize(len(self._all_events), 'event')}. "
+                f"Observed range: {self._format_summary_time_value(total_bounds[0])} to "
+                f"{self._format_summary_time_value(total_bounds[1])} ({_format_duration(total_span)}). "
+                "Use the overview to select a dense period, then drag to pan and hold Ctrl "
+                "+ mouse wheel to zoom the detailed graph."
+            )
+            self.overview_label.setText(
+                "The overview compresses the full sample range into a density strip so "
+                "you can brush a smaller investigation window instead of rendering every "
+                "event at full scale."
+            )
+            self.focus_label.setText(
+                f"Focused window: {self._format_summary_time_value(selected_events[0]['timestamp'])} to "
+                f"{self._format_summary_time_value(selected_events[-1]['timestamp'])}. "
+                f"{len(selected_events)} {_pluralize(len(selected_events), 'event')} across "
+                f"{visible_lane_count} {_pluralize(visible_lane_count, 'lane')}. "
+                "Hover a node for a quick summary or click it to inspect the underlying evidence."
+            )
 
         if reset_detail_view:
-            self.details_view.setPlainText(
-                "Click a node to inspect its evidence.\n\n"
-                f"Current window: {len(selected_events)} {_pluralize(len(selected_events), 'event')} "
-                f"across {visible_lane_count} {_pluralize(visible_lane_count, 'lane')}."
-            )
+            if self._time_mode == "offset":
+                self.details_view.setPlainText(
+                    "Click a node to inspect the plugin execution details.\n\n"
+                    f"Current window: {len(selected_events)} {_pluralize(len(selected_events), 'event')} "
+                    f"across {visible_lane_count} {_pluralize(visible_lane_count, 'plugin')}."
+                )
+            else:
+                self.details_view.setPlainText(
+                    "Click a node to inspect its evidence.\n\n"
+                    f"Current window: {len(selected_events)} {_pluralize(len(selected_events), 'event')} "
+                    f"across {visible_lane_count} {_pluralize(visible_lane_count, 'lane')}."
+                )
 
         self._rebuild_detail_scene(selected_events, reset_view=reset_detail_view)
 
@@ -887,7 +1063,11 @@ class TimelineGraphView(QWidget):
         if not events:
             self._lane_count = 0
             self._relationship_count = 0
-            placeholder = scene.addSimpleText("No events in the current focus window")
+            placeholder = scene.addSimpleText(
+                "Timeline unavailable"
+                if self._time_mode == "offset"
+                else "No events in the current focus window"
+            )
             placeholder.setBrush(QBrush(palette.text().color()))
             placeholder.setPos(28, 24)
             placeholder.setFlag(
@@ -987,7 +1167,7 @@ class TimelineGraphView(QWidget):
             x = x_for_timestamp(tick_time)
             scene.addLine(x, top_margin - 22.0, x, axis_y + 12.0, guide_pen)
             tick_label = scene.addSimpleText(
-                _format_timestamp_label(tick_time, actual_span)
+                self._format_axis_time_label(tick_time, actual_span)
             )
             tick_label.setBrush(QBrush(palette.text().color()))
             tick_label.setPos(x - 34.0, axis_y + 18.0)
@@ -1200,7 +1380,7 @@ class TimelineGraphView(QWidget):
 
     def _format_single_event_details(self, event: Mapping[str, Any]) -> str:
         lines = [
-            "Selected timeline event",
+            "Selected timeline event" if self._time_mode != "offset" else "Selected plugin execution event",
             "",
             f"Time: {event.get('timestamp_text') or str(event.get('timestamp') or '')}",
             f"Entity: {event.get('display_label') or event.get('entity_label') or 'Unknown'}",
@@ -1209,6 +1389,15 @@ class TimelineGraphView(QWidget):
             f"Field: {event.get('field') or 'Unknown'}",
             f"Description: {event.get('description') or ''}",
         ]
+
+        if event.get("status"):
+            lines.append(f"Status: {event['status']}")
+        if event.get("elapsed_seconds") is not None:
+            lines.append(
+                f"Plugin runtime: {_format_offset_seconds(float(event['elapsed_seconds']))}"
+            )
+        if event.get("error_message"):
+            lines.append(f"Error: {event['error_message']}")
 
         if event.get("pid") is not None:
             lines.append(f"PID: {event['pid']}")
