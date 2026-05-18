@@ -1,73 +1,63 @@
-# Vol For SMEs
+# Vol for SMEs
 
-A simplified memory forensics interface for small and medium enterprises.
+a simplified memory forensics interface for small and medium enterprises.
 
-## Requirements
-- Python 3.12 or newer
-- Volatility 3 is expected to be available from the Python environment or a compatible command on `PATH`
+## App bundle
+Vol for SMEs comes with a setup.exe containing all dependencies, including Python, PyQt6 and volatility3
+no dependencies are required if installed.
 
-## Dependencies
-- Runtime:
-  `PyQt6>=6.7`
-- Runtime memory-forensics dependency:
-  `volatility3>=2.28.0`
-- Development and testing:
-  `pytest>=8`
-- These are also listed in `requirements.txt` for local environment setup.
+## Note for markers
+if you do not wish to install the software, you may run the code through this alternative approach, although Python 3.12 will be required if doing so.
+from project root:
+  python -m pip install -r requirements.txt
+  pyton -m vol_for_smes
+optional:
+  python -m pytest
+
+pre-requisites for this route:
+  https://www.python.org/downloads/latest/python3.12/
+
+if testing app install:
+  https://github.com/jrsoftware/issrc/releases/download/is-6_7_2/innosetup-6.7.2.exe
+  run .\scripts\build-installer.ps1 #The submitted version will have the latest app built so this is optional if you want to make sure
+  run dist/installer/VolForSMEs-Setup-0.1.0.exe and install 
+
+sample memory images:
+  https://livebournemouthac-my.sharepoint.com/:f:/g/personal/s5643193_bournemouth_ac_uk/IgDMAyjwgzL6Tb36JXDD8GAKAc1sm1pbDm89Uv8twaXMqAw?e=ejAw65
+  
+
+The bundled app includes an uninstaller with the option to remove user files so no registry keys or other traces will remain/
 
 ## Installation
-- Install dependencies by running the following command:
-  `python -m pip install -r requirements.txt`
-- If you want the `vol-for-smes` and `vol-for-smes-cli` command entrypoints as well, install the package itself after that:
-  `python -m pip install -e . --no-deps`
-
-## Windows Installer
-- The Windows installer is built with Inno Setup 6.
-- The Windows build now creates a self-contained app bundle that includes a private Python runtime plus the packaged `PyQt6` and `volatility3` dependencies.
-- The target machine does not need Python, `PyQt6`, or `volatility3` installed separately.
-- Install Inno Setup 6, or note the full path to `ISCC.exe`.
-- Build the installer from the repository root with:
-  `.\scripts\build-installer.ps1`
-- If Inno Setup is installed in a non-default location, pass the compiler path explicitly:
-  `.\scripts\build-installer.ps1 -InnoCompilerPath "C:\Path\To\ISCC.exe"`
-- To build only the self-contained app folder without creating the installer:
-  `python .\scripts\build-windows-bundle.py`
-- The Inno script lives at `installer\VolForSMEs.iss`.
-- The generated installer is written to `dist\installer\`.
-- The staged self-contained app bundle is written to `dist\Vol For SMEs\`.
-- The installer packages that freshly built bundle, so it does not depend on a system Python install at runtime.
-- The current installer is configured as a per-user install under `%LocalAppData%\Programs\Vol For SMEs` by default, with a Start Menu shortcut and an optional desktop shortcut.
-- The setup wizard shows the normal destination-folder page, so the user can click `Browse...` and choose a different user-writable install location if needed.
+the Windows installer is built with Inno Setup 6.
+  run setup.exe
 
 ## Launching
-- Launch the GUI:
-  `python -m vol_for_smes`
-- Or use the installed GUI entrypoint:
-  `vol-for-smes`
-- Launch the CLI workflow:
-  `vol-for-smes-cli`
+Launch Vol For Smes.exe shortcut
 
 ## Features
-- PyQt6 desktop GUI as the primary interface
-- Persisted appearance themes including light, dark, and mint-accent variants
-- Built-in and custom plugin presets with persistent storage
-- Volatility plugin discovery to support larger preset selection
-- Automated OS detection
-- Multi-plugin investigation runs through selectable presets
-- Timeline of artifacts
-- PDF forensic reporting
+- Desktop application for memory forensics investigations
+- Alternative command-line workflow for running the tool without the GUI (Included for testing purposes, not the intended route)
+- Integration with Volatility 3 for analysing Windows memory images
+- Automatic operating system detection
+- Built-in and custom plugin presets
+- Multi-plugin investigation support
+- Automated process and network analysis
+- Timeline-based presentation of suspicious artefacts
+- PDF report export for investigation findings
+- Windows installer with bundled Python runtime and required dependencies
 
 ## Notes
-- The current investigation workflow is designed for Windows memory images.
-- The app uses Volatility 3 with automatic OS detection for supported Windows images.
-- Automated findings are heuristic indicators intended to support human review, not replace it.
-- `vol-for-smes` launches the GUI. `vol-for-smes-cli` keeps the original CLI workflow available as a secondary entry point.
-- Volatility command discovery prefers the installed `volatility3` package and then compatible commands such as `vol` or `volatility`.
-- PDF reporting is implemented without an external PDF package dependency.
+the current investigation workflow is designed for Windows memory images only, windows versions 10 and 11 have been verified as working
+any windows memory image that can run with vol 3 should work
+automated findings are heuristic indicators intended to support human review and speed up investigations, not replace it.
+treat the results as pointers, not facts
+the tool may miss some artefacts and occasionally get false positives.
+
 
 ## Evidence Safety
-- Treat memory images as sensitive evidence. The app hashes the selected memory image before analysis and records that metadata in the report output.
-- Use a dedicated local analysis folder for `.mem` files and generated reports.
-- Avoid cloud-synced folders, network shares, and the project repository for evidence or report output. The app shows checklist-based safety reminders when selecting evidence and report paths, but it does not inspect or block the chosen location.
-- The standard investigation workflow reads the memory image and does not auto-open exported reports or extracted binaries.
-- Run the app as a normal user unless a separate administrative task explicitly requires elevation.
+treat memory images as sensitive evidence. The app hashes the selected memory image before analysis and records that metadata in the report output. Used to verify integrity of data
+use a dedicated local analysis folder for `.mem` files and generated reports to keep evidence handling contained and traceable
+memory images can contain sensitive date so avoid cloud-synced folders, network shares, and the project repository for evidence or report output.
+the standard investigation workflow reads the memory image and does not auto-open exported extracted binaries, be careful when opening artefact dumps. The app does not currently have a dumping functionality but may in the future.
+run the app as a normal user unless a separate administrative task explicitly requires elevation, assume least privelege principals.
